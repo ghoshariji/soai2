@@ -5,10 +5,10 @@
  *
  * All routes require authenticate + checkTenant.
  *
- * POST   /api/announcements            → createAnnouncement  (society_admin, announcementUpload.single('image'))
+ * POST   /api/announcements            → createAnnouncement  (society_admin; image optional, multipart or JSON)
  * GET    /api/announcements            → getAnnouncements
  * GET    /api/announcements/:id        → getAnnouncement
- * PUT    /api/announcements/:id        → updateAnnouncement  (society_admin, announcementUpload.single('image'))
+ * PUT    /api/announcements/:id        → updateAnnouncement  (society_admin; image optional)
  * DELETE /api/announcements/:id        → deleteAnnouncement  (society_admin)
  * POST   /api/announcements/:id/read   → markAsRead
  */
@@ -30,6 +30,18 @@ const { announcementUpload }       = require('../config/cloudinary');
 
 const router = express.Router();
 
+/**
+ * Image is optional: only run multer for multipart requests so JSON bodies
+ * (title, description, priority) work without a file and without Cloudinary.
+ */
+function optionalAnnouncementImage(req, res, next) {
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  if (ct.includes('multipart/form-data')) {
+    return announcementUpload.single('image')(req, res, next);
+  }
+  return next();
+}
+
 // Apply authenticate + checkTenant to every announcement route
 router.use(authenticate, checkTenant);
 
@@ -37,7 +49,7 @@ router.use(authenticate, checkTenant);
 router.post(
   '/',
   authorize('society_admin'),
-  announcementUpload.single('image'),
+  optionalAnnouncementImage,
   createAnnouncement,
 );
 
@@ -51,7 +63,7 @@ router.get('/:id', getAnnouncement);
 router.put(
   '/:id',
   authorize('society_admin'),
-  announcementUpload.single('image'),
+  optionalAnnouncementImage,
   updateAnnouncement,
 );
 

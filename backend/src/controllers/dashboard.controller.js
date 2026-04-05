@@ -68,8 +68,10 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
   const [
     societyStats,
     totalUsers,
+    activeUsersCount,
     subscriptionStats,
     monthlyGrowthRaw,
+    userActivityRaw,
     topSocietiesRaw,
   ] = await Promise.all([
 
@@ -88,6 +90,13 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
 
     // 2. Total non-deleted, non-super_admin users across all societies
     User.countDocuments({ isDeleted: false, role: { $ne: 'super_admin' } }),
+
+    // 2b. Active residents/admins (excludes super_admin)
+    User.countDocuments({
+      isDeleted: false,
+      role:      { $ne: 'super_admin' },
+      status:    'active',
+    }),
 
     // 3. Subscription counts: active, expired, expiring within 7 days
     Subscription.aggregate([
@@ -137,6 +146,27 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
       { $sort: { '_id.year': 1, '_id.month': 1 } },
     ]),
 
+    // 4b. Monthly "activity" buckets from lastSeen (non–super_admin users)
+    User.aggregate([
+      {
+        $match: {
+          isDeleted: false,
+          role:      { $ne: 'super_admin' },
+          lastSeen:  { $gte: startOfMonthOffset(-5) },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year:  { $year:  '$lastSeen' },
+            month: { $month: '$lastSeen' },
+          },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } },
+    ]),
+
     // 5. Top 5 societies by user count
     User.aggregate([
       { $match: { isDeleted: false, societyId: { $ne: null }, role: { $ne: 'super_admin' } } },
@@ -178,6 +208,7 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
   // We want exactly 6 buckets: current month and 5 months back.
   const growthMap = new Map();
   for (const doc of monthlyGrowthRaw) {
+    if (!doc?._id?.year || doc._id.month == null) continue;
     const label = `${doc._id.year}-${String(doc._id.month).padStart(2, '0')}`;
     growthMap.set(label, doc.count);
   }
@@ -188,6 +219,19 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
     return { month: label, count: growthMap.get(label) ?? 0 };
   });
 
+  const activityMap = new Map();
+  for (const doc of userActivityRaw) {
+    if (!doc?._id?.year || doc._id.month == null) continue;
+    const label = `${doc._id.year}-${String(doc._id.month).padStart(2, '0')}`;
+    activityMap.set(label, doc.count);
+  }
+
+  const userActivity = Array.from({ length: 6 }, (_, i) => {
+    const offset = i - 5;
+    const label  = monthLabel(offset);
+    return { month: label, count: activityMap.get(label) ?? 0 };
+  });
+
   return ApiResponse.ok('Super admin dashboard data fetched successfully.', {
     societies: {
       total:    sStats.total,
@@ -195,7 +239,8 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
       inactive: sStats.inactive,
     },
     users: {
-      total: totalUsers,
+      total:  totalUsers,
+      active: activeUsersCount,
     },
     subscriptions: {
       active:       activeSubCount,
@@ -203,6 +248,7 @@ const getSuperAdminDashboard = asyncHandler(async (req, res) => {
       expiringSoon: expiringSoonSubCount,
     },
     monthlyGrowth,
+    userActivity,
     topSocietiesByUsers: topSocietiesRaw,
   }).send(res);
 });

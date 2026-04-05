@@ -5,7 +5,7 @@
  *
  * All routes require authenticate + checkTenant.
  *
- * POST   /api/complaints           → createComplaint     (complaintUpload.array('images', 3))
+ * POST   /api/complaints           → createComplaint     (images optional; multipart or JSON)
  * GET    /api/complaints           → getComplaints
  * GET    /api/complaints/:id       → getComplaint
  * PATCH  /api/complaints/:id/status → updateComplaintStatus  (society_admin)
@@ -28,11 +28,23 @@ const { complaintUpload }         = require('../config/cloudinary');
 
 const router = express.Router();
 
+/**
+ * Photos are optional: only run Cloudinary multer for multipart requests so
+ * JSON-only submits work without files or Cloudinary.
+ */
+function optionalComplaintImages(req, res, next) {
+  const ct = (req.headers['content-type'] || '').toLowerCase();
+  if (ct.includes('multipart/form-data')) {
+    return complaintUpload.array('images', 3)(req, res, next);
+  }
+  return next();
+}
+
 // Apply authenticate + checkTenant to every complaint route
 router.use(authenticate, checkTenant);
 
 // POST /api/complaints
-router.post('/', complaintUpload.array('images', 3), createComplaint);
+router.post('/', optionalComplaintImages, createComplaint);
 
 // GET /api/complaints
 router.get('/', getComplaints);

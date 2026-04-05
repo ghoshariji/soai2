@@ -18,12 +18,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-refresh-token'],
   credentials: true,
 }));
-app.use(mongoSanitize());
 app.use(generalLimiter);
 
-// ── Parsing ────────────────────────────────────────────────────────────────
+// ── Parsing (must run before mongoSanitize so req.body exists) ─────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(mongoSanitize());
 
 // ── Logging ────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

@@ -1,10 +1,5 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Avatar from '@/components/common/Avatar';
 import { Colors, Spacing, Radius } from '@/theme';
@@ -20,7 +15,7 @@ export interface Message {
   content: string;
   senderId: string;
   createdAt: string;
-  readBy: string[];
+  readBy: string[] | Array<{ userId?: string }>;
   type: MessageType;
 }
 
@@ -34,9 +29,6 @@ interface MessageBubbleProps {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAX_BUBBLE_WIDTH = SCREEN_WIDTH * 0.72;
 
 function formatTime(isoDate: string): string {
   const date = new Date(isoDate);
@@ -122,13 +114,23 @@ const sysStyles = StyleSheet.create({
 // Main component
 // ---------------------------------------------------------------------------
 
+function readByUserIds(readBy: Message['readBy']): string[] {
+  if (!Array.isArray(readBy)) return [];
+  return readBy.map((r) =>
+    typeof r === 'string' ? r : String((r as { userId?: string }).userId ?? ''),
+  );
+}
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   currentUserId,
   senderName,
   senderPhoto,
 }) => {
+  const { width: screenW } = useWindowDimensions();
+  const maxBubbleW = screenW * 0.72;
   const isOwn = message.senderId === currentUserId;
+  const readIds = readByUserIds(message.readBy);
 
   if (message.type === 'system') {
     return <SystemMessage content={message.content} />;
@@ -138,7 +140,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
     return (
       <View style={styles.ownRow}>
         {/* Bubble */}
-        <View style={[styles.bubble, styles.ownBubble]}>
+        <View style={[styles.bubble, styles.ownBubble, { maxWidth: maxBubbleW }]}>
           <Text style={styles.ownText} selectable>
             {message.content}
           </Text>
@@ -146,7 +148,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           <View style={styles.ownFooter}>
             <Text style={styles.ownTime}>{formatTime(message.createdAt)}</Text>
             <ReadTicks
-              readBy={message.readBy}
+              readBy={readIds}
               currentUserId={currentUserId}
               otherParticipantsExist
             />
@@ -167,7 +169,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         style={styles.avatar}
       />
 
-      <View style={styles.otherColumn}>
+      <View style={[styles.otherColumn, { maxWidth: maxBubbleW }]}>
         {/* Sender name */}
         {senderName ? (
           <Text style={styles.senderName} numberOfLines={1}>
@@ -176,7 +178,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         ) : null}
 
         {/* Bubble */}
-        <View style={[styles.bubble, styles.otherBubble]}>
+        <View style={[styles.bubble, styles.otherBubble, { maxWidth: maxBubbleW }]}>
           <Text style={styles.otherText} selectable>
             {message.content}
           </Text>
@@ -232,7 +234,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   otherColumn: {
-    maxWidth: MAX_BUBBLE_WIDTH,
+    flexShrink: 1,
   },
   senderName: {
     fontSize: 12,
@@ -242,7 +244,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   otherBubble: {
-    backgroundColor: Colors.bgCard,
+    backgroundColor: Colors.bgInput,
     borderWidth: 1,
     borderColor: Colors.border,
     borderBottomLeftRadius: 4,
@@ -259,13 +261,12 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Shared bubble base
+  // Shared bubble base (maxWidth set per layout via useWindowDimensions)
   bubble: {
-    maxWidth: MAX_BUBBLE_WIDTH,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 8,
     borderRadius: Radius.lg,
   },
 });
 
-export default MessageBubble;
+export default React.memo(MessageBubble);

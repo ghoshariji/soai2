@@ -4,6 +4,7 @@ import axios, {
   AxiosError,
   InternalAxiosRequestConfig,
 } from 'axios';
+import { getApiBaseUrl } from '@/config/apiBase';
 import {
   getAccessToken,
   getRefreshToken,
@@ -35,9 +36,7 @@ function navigateToLogin(): void {
 // Base URL
 // ---------------------------------------------------------------------------
 
-const BASE_URL = __DEV__
-  ? 'http://10.0.2.2:5000/api'
-  : (process.env.API_URL ?? 'https://api.soai.app/api');
+const BASE_URL = getApiBaseUrl();
 
 // ---------------------------------------------------------------------------
 // Axios instance
@@ -51,6 +50,40 @@ export const api: AxiosInstance = axios.create({
     Accept: 'application/json',
   },
 });
+
+/** Backend wraps payloads as `{ success, data: T, message? }`. */
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+type ApiErrorBody = {
+  message?: string;
+  errors?: Array<{ field?: string; message?: string }>;
+};
+
+/** Human-readable message from axios/network errors (uses backend `message` when present). */
+export function getApiErrorMessage(err: unknown, fallback = 'Request failed'): string {
+  if (axios.isAxiosError(err)) {
+    const d = err.response?.data as ApiErrorBody | undefined;
+    if (d?.message && typeof d.message === 'string') {
+      const first = d.errors?.find((e) => e?.message || e?.field);
+      if (first) {
+        const detail = first.message ?? first.field ?? '';
+        return detail ? `${d.message} — ${detail}` : d.message;
+      }
+      return d.message;
+    }
+    if (err.code === 'ECONNABORTED') return 'Request timed out. Check your connection.';
+    if (err.message === 'Network Error') {
+      return 'Cannot reach the server. Use the same Wi‑Fi as your dev machine or check the API URL.';
+    }
+    if (err.message) return err.message;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
 
 // ---------------------------------------------------------------------------
 // Request interceptor – attach access token
@@ -88,6 +121,18 @@ function processQueue(error: unknown, token: string | null = null): void {
   failedQueue = [];
 }
 
+/** Do not try to refresh session for these routes (401 is expected, e.g. wrong password). */
+function shouldSkipRefreshRetry(config: InternalAxiosRequestConfig): boolean {
+  const u = (config.url || '').toLowerCase();
+  return (
+    u.includes('/auth/login') ||
+    u.includes('/auth/register') ||
+    u.includes('/auth/forgot-password') ||
+    u.includes('/auth/reset-password') ||
+    u.includes('/auth/refresh-token')
+  );
+}
+
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
@@ -95,7 +140,15 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !shouldSkipRefreshRetry(originalRequest)
+    ) {
       if (isRefreshing) {
         return new Promise<AxiosResponse>((resolve, reject) => {
           failedQueue.push({
@@ -114,24 +167,30 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = await getRefreshToken();
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
+        const storedRefresh = await getRefreshToken();
+        if (!storedRefresh) {
+          await clearAuth();
+          navigateToLogin();
+          return Promise.reject(error);
         }
 
-        const { data } = await axios.post<{
-          accessToken: string;
-          refreshToken: string;
-        }>(`${BASE_URL}/auth/refresh-token`, { refreshToken });
+        const { data: body } = await axios.post<
+          ApiResponse<{ accessToken: string; refreshToken: string }>
+        >(`${BASE_URL}/auth/refresh-token`, { refreshToken: storedRefresh });
 
-        await setAccessToken(data.accessToken);
-        await setRefreshToken(data.refreshToken);
+        const tokens = body?.data;
+        if (!tokens?.accessToken || !tokens?.refreshToken) {
+          throw new Error('Invalid refresh response');
+        }
+
+        await setAccessToken(tokens.accessToken);
+        await setRefreshToken(tokens.refreshToken);
 
         if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+          originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`;
         }
 
-        processQueue(null, data.accessToken);
+        processQueue(null, tokens.accessToken);
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
@@ -151,19 +210,21 @@ api.interceptors.response.use(
 // Typed response helpers
 // ---------------------------------------------------------------------------
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
+/** Pagination as returned by the backend (`paginateMeta`). */
+export interface PaginationMeta {
+  totalDocs: number;
+  totalPages: number;
+  currentPage: number;
+  limit: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
 }
 
 export interface PaginatedResponse<T> {
   success: boolean;
+  message?: string;
   data: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  meta?: PaginationMeta;
 }
 
 export interface PaginationParams {
@@ -217,13 +278,22 @@ export const authService = {
   forgotPassword: (email: string) =>
     api.post<ApiResponse<null>>('/auth/forgot-password', { email }),
 
-  resetPassword: (token: string, password: string) =>
-    api.post<ApiResponse<null>>('/auth/reset-password', { token, password }),
+  resetPassword: (token: string, newPassword: string, confirmNewPassword: string) =>
+    api.post<ApiResponse<null>>('/auth/reset-password', {
+      token,
+      newPassword,
+      confirmNewPassword,
+    }),
 
-  changePassword: (currentPassword: string, newPassword: string) =>
-    api.post<ApiResponse<null>>('/auth/change-password', {
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+    confirmNewPassword: string,
+  ) =>
+    api.put<ApiResponse<null>>('/auth/change-password', {
       currentPassword,
       newPassword,
+      confirmNewPassword,
     }),
 };
 
@@ -248,6 +318,11 @@ export const societyService = {
 
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/societies/${id}`),
+
+  toggleStatus: (id: string) =>
+    api.patch<ApiResponse<Record<string, unknown>>>(
+      `/societies/${id}/toggle-status`,
+    ),
 
   getMembers: (id: string, params?: PaginationParams) =>
     api.get<PaginatedResponse<Record<string, unknown>>>(
@@ -274,7 +349,12 @@ export const societyService = {
 // ---------------------------------------------------------------------------
 
 export const userService = {
-  getAll: (params?: PaginationParams & { societyId?: string }) =>
+  getAll: (
+    params?: PaginationParams & {
+      societyId?: string;
+      status?: 'active' | 'inactive' | 'blocked';
+    },
+  ) =>
     api.get<PaginatedResponse<Record<string, unknown>>>('/users', { params }),
 
   getOne: (id: string) =>
@@ -286,10 +366,14 @@ export const userService = {
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/users/${id}`),
 
+  /** Multipart: fields `name`, `phone`; file field `profilePhoto` (optional). */
   updateProfile: (data: FormData) =>
-    api.put<ApiResponse<Record<string, unknown>>>('/users/profile', data, {
+    api.put<ApiResponse<Record<string, unknown>>>('/users/me', data, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+  getMyProfile: () =>
+    api.get<ApiResponse<Record<string, unknown>>>('/users/me'),
 
   updateRole: (id: string, role: string) =>
     api.patch<ApiResponse<Record<string, unknown>>>(`/users/${id}/role`, {
@@ -354,10 +438,16 @@ export const postService = {
 
   create: (data: FormData | Record<string, unknown>) =>
     api.post<ApiResponse<Record<string, unknown>>>('/posts', data, {
-      headers:
-        data instanceof FormData
-          ? { 'Content-Type': 'multipart/form-data' }
-          : {},
+      ...(data instanceof FormData
+        ? {
+            transformRequest: (body: unknown, headers: { delete?: (k: string) => void }) => {
+              if (body instanceof FormData && headers?.delete) {
+                headers.delete('Content-Type');
+              }
+              return body;
+            },
+          }
+        : {}),
     }),
 
   update: (id: string, data: Record<string, unknown>) =>
@@ -366,11 +456,14 @@ export const postService = {
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/posts/${id}`),
 
+  /** Toggle like — same endpoint adds or removes current user’s like. */
   like: (id: string) =>
-    api.post<ApiResponse<{ likes: number }>>(`/posts/${id}/like`),
+    api.post<
+      ApiResponse<{ liked: boolean; likesCount: number; likes: string[] }>
+    >(`/posts/${id}/like`),
 
-  unlike: (id: string) =>
-    api.post<ApiResponse<{ likes: number }>>(`/posts/${id}/unlike`),
+  patch: (id: string, data: Record<string, unknown>) =>
+    api.patch<ApiResponse<Record<string, unknown>>>(`/posts/${id}`, data),
 
   addComment: (id: string, content: string) =>
     api.post<ApiResponse<Record<string, unknown>>>(`/posts/${id}/comments`, {
@@ -404,10 +497,18 @@ export const complaintService = {
 
   create: (data: FormData | Record<string, unknown>) =>
     api.post<ApiResponse<Record<string, unknown>>>('/complaints', data, {
-      headers:
-        data instanceof FormData
-          ? { 'Content-Type': 'multipart/form-data' }
-          : {},
+      /** Photo uploads + Cloudinary need more time than default 15s. */
+      timeout: data instanceof FormData ? 120_000 : 30_000,
+      ...(data instanceof FormData
+        ? {
+            transformRequest: (body: unknown, headers: { delete?: (k: string) => void }) => {
+              if (body instanceof FormData && headers?.delete) {
+                headers.delete('Content-Type');
+              }
+              return body;
+            },
+          }
+        : {}),
     }),
 
   update: (id: string, data: Record<string, unknown>) =>
@@ -416,22 +517,11 @@ export const complaintService = {
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/complaints/${id}`),
 
-  updateStatus: (id: string, status: string, resolution?: string) =>
+  updateStatus: (id: string, status: string, comment?: string) =>
     api.patch<ApiResponse<Record<string, unknown>>>(
       `/complaints/${id}/status`,
-      { status, resolution },
+      { status, comment },
     ),
-
-  addComment: (id: string, content: string) =>
-    api.post<ApiResponse<Record<string, unknown>>>(
-      `/complaints/${id}/comments`,
-      { content },
-    ),
-
-  getMyComplaints: (params?: PaginationParams) =>
-    api.get<PaginatedResponse<Record<string, unknown>>>('/complaints/my', {
-      params,
-    }),
 };
 
 // ---------------------------------------------------------------------------
@@ -440,24 +530,43 @@ export const complaintService = {
 
 export const announcementService = {
   getAll: (params?: PaginationParams & { societyId?: string }) =>
-    api.get<PaginatedResponse<Record<string, unknown>>>('/announcements', {
+    api.get<ApiResponse<Record<string, unknown>>>('/announcements', {
       params,
     }),
 
   getOne: (id: string) =>
     api.get<ApiResponse<Record<string, unknown>>>(`/announcements/${id}`),
 
-  create: (data: Record<string, unknown>) =>
-    api.post<ApiResponse<Record<string, unknown>>>('/announcements', data),
+  /** Multipart when `FormData` (e.g. with image); JSON when a plain object (no image). */
+  create: (data: FormData | Record<string, unknown>) =>
+    data instanceof FormData
+      ? api.post<ApiResponse<Record<string, unknown>>>('/announcements', data, {
+          transformRequest: (body, headers) => {
+            if (body instanceof FormData && headers && typeof headers.delete === 'function') {
+              headers.delete('Content-Type');
+            }
+            return body;
+          },
+        })
+      : api.post<ApiResponse<Record<string, unknown>>>('/announcements', data),
 
-  update: (id: string, data: Record<string, unknown>) =>
-    api.put<ApiResponse<Record<string, unknown>>>(
-      `/announcements/${id}`,
-      data,
-    ),
+  update: (id: string, data: FormData | Record<string, unknown>) =>
+    data instanceof FormData
+      ? api.put<ApiResponse<Record<string, unknown>>>(`/announcements/${id}`, data, {
+          transformRequest: (body, headers) => {
+            if (body instanceof FormData && headers && typeof headers.delete === 'function') {
+              headers.delete('Content-Type');
+            }
+            return body;
+          },
+        })
+      : api.put<ApiResponse<Record<string, unknown>>>(`/announcements/${id}`, data),
 
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/announcements/${id}`),
+
+  markAsRead: (id: string) =>
+    api.post<ApiResponse<null>>(`/announcements/${id}/read`),
 
   pin: (id: string) =>
     api.patch<ApiResponse<Record<string, unknown>>>(
@@ -501,7 +610,9 @@ export const groupService = {
     api.delete<ApiResponse<null>>(`/groups/${id}`),
 
   addMember: (groupId: string, userId: string) =>
-    api.post<ApiResponse<null>>(`/groups/${groupId}/members`, { userId }),
+    api.post<ApiResponse<Record<string, unknown>>>(`/groups/${groupId}/members`, {
+      userIds: [userId],
+    }),
 
   removeMember: (groupId: string, userId: string) =>
     api.delete<ApiResponse<null>>(`/groups/${groupId}/members/${userId}`),
@@ -509,8 +620,17 @@ export const groupService = {
   makeAdmin: (groupId: string, userId: string) =>
     api.patch<ApiResponse<null>>(`/groups/${groupId}/members/${userId}/admin`),
 
+  /** Use GET /groups and filter `isMember` on the client (no /groups/my route). */
   getMyGroups: () =>
-    api.get<ApiResponse<Record<string, unknown>[]>>('/groups/my'),
+    api.get<PaginatedResponse<Record<string, unknown>>>('/groups', {
+      params: { limit: 200, page: 1 },
+    }),
+
+  join: (groupId: string) =>
+    api.post<ApiResponse<null>>(`/groups/${groupId}/join`),
+
+  leave: (groupId: string) =>
+    api.delete<ApiResponse<null>>(`/groups/${groupId}/leave`),
 };
 
 // ---------------------------------------------------------------------------
@@ -518,6 +638,10 @@ export const groupService = {
 // ---------------------------------------------------------------------------
 
 export const chatService = {
+  /** Active society members except self — for starting a personal chat. */
+  getDirectory: () =>
+    api.get<ApiResponse<Record<string, unknown>[]>>('/chat/directory'),
+
   getPersonalMessages: (
     userId: string,
     params?: PaginationParams,
@@ -533,21 +657,20 @@ export const chatService = {
       { params },
     ),
 
-  sendPersonalMessage: (data: FormData | Record<string, unknown>) =>
-    api.post<ApiResponse<Record<string, unknown>>>('/chat/personal', data, {
-      headers:
-        data instanceof FormData
-          ? { 'Content-Type': 'multipart/form-data' }
-          : {},
-    }),
+  sendPersonalMessage: (
+    otherUserId: string,
+    data: Record<string, unknown>,
+  ) =>
+    api.post<ApiResponse<Record<string, unknown>>>(
+      `/chat/personal/${otherUserId}`,
+      data,
+    ),
 
-  sendGroupMessage: (data: FormData | Record<string, unknown>) =>
-    api.post<ApiResponse<Record<string, unknown>>>('/chat/group', data, {
-      headers:
-        data instanceof FormData
-          ? { 'Content-Type': 'multipart/form-data' }
-          : {},
-    }),
+  sendGroupMessage: (groupId: string, data: Record<string, unknown>) =>
+    api.post<ApiResponse<Record<string, unknown>>>(
+      `/chat/group/${groupId}`,
+      data,
+    ),
 
   getConversations: () =>
     api.get<ApiResponse<Record<string, unknown>[]>>('/chat/conversations'),
@@ -557,18 +680,23 @@ export const chatService = {
 
   markRead: (messageId: string) =>
     api.patch<ApiResponse<null>>(`/chat/messages/${messageId}/read`),
-
-  markConversationRead: (userId: string) =>
-    api.patch<ApiResponse<null>>(`/chat/personal/${userId}/read`),
 };
 
 // ---------------------------------------------------------------------------
 // Notification service
 // ---------------------------------------------------------------------------
 
+/** Backend GET /notifications wraps the list in `data`, not a bare array. */
+export interface NotificationsListPayload {
+  notifications: Record<string, unknown>[];
+  total: number;
+  page: number;
+  pages: number;
+}
+
 export const notificationService = {
   getAll: (params?: PaginationParams) =>
-    api.get<PaginatedResponse<Record<string, unknown>>>('/notifications', {
+    api.get<ApiResponse<NotificationsListPayload>>('/notifications', {
       params,
     }),
 
@@ -579,7 +707,7 @@ export const notificationService = {
     api.patch<ApiResponse<null>>(`/notifications/${id}/read`),
 
   markAllAsRead: () =>
-    api.patch<ApiResponse<null>>('/notifications/mark-all-read'),
+    api.patch<ApiResponse<null>>('/notifications/read-all'),
 
   delete: (id: string) =>
     api.delete<ApiResponse<null>>(`/notifications/${id}`),
@@ -597,7 +725,24 @@ export const notificationService = {
 // Upload service
 // ---------------------------------------------------------------------------
 
+export interface ExcelBulkImportResult {
+  total: number;
+  success: number;
+  failed: Array<{
+    row?: number;
+    name?: string;
+    email?: string;
+    reason?: string;
+  }>;
+}
+
 export const uploadService = {
+  /** Society admin: .xlsx with columns Name, Email, Phone, FlatNumber (row 1 = headers). */
+  uploadExcel: (formData: FormData) =>
+    api.post<ApiResponse<ExcelBulkImportResult>>('/upload/excel', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
   uploadImage: (formData: FormData) =>
     api.post<ApiResponse<{ url: string; publicId: string }>>(
       '/upload/image',
@@ -631,10 +776,9 @@ export const dashboardService = {
   getSuperAdminStats: () =>
     api.get<ApiResponse<Record<string, unknown>>>('/dashboard/super-admin'),
 
-  getSocietyAdminStats: (societyId: string) =>
-    api.get<ApiResponse<Record<string, unknown>>>(
-      `/dashboard/society/${societyId}`,
-    ),
+  /** Society admin dashboard (tenant-scoped; uses JWT societyId). */
+  getSocietyAdminStats: () =>
+    api.get<ApiResponse<Record<string, unknown>>>('/dashboard/society-admin'),
 
   getUserDashboard: () =>
     api.get<ApiResponse<Record<string, unknown>>>('/dashboard/user'),

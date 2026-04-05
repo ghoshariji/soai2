@@ -17,6 +17,7 @@ const notificationSchema = new mongoose.Schema(
         'announcement',
         'complaint_update',
         'new_message',
+        'new_post',
         'post_like',
         'post_comment',
         'new_member',

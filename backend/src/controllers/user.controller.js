@@ -11,7 +11,6 @@
  */
 
 const Joi = require('joi');
-const nodemailer = require('nodemailer');
 
 const User         = require('../models/User');
 const { cloudinary } = require('../config/cloudinary');
@@ -25,53 +24,7 @@ const {
   generatePassword,
 } = require('../utils/helpers');
 const logger = require('../utils/logger');
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mail transport (nodemailer)
-// Falls back gracefully when SMTP is not configured (dev/test envs).
-// ─────────────────────────────────────────────────────────────────────────────
-const createTransport = () => {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    logger.warn('SMTP credentials not configured – emails will be skipped.');
-    return null;
-  }
-  return nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: parseInt(SMTP_PORT, 10) || 587,
-    secure: parseInt(SMTP_PORT, 10) === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
-};
-
-const mailer = createTransport();
-
-/**
- * Send a welcome e-mail to a newly created resident.
- * Fails silently so that a mail-server outage never blocks the HTTP response.
- */
-const sendWelcomeEmail = async ({ name, email, password, societyName }) => {
-  if (!mailer) return;
-  try {
-    await mailer.sendMail({
-      from: `"${process.env.MAIL_FROM_NAME || 'SoAI'}" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Welcome to ${societyName || 'your society'} – Your account details`,
-      html: `
-        <h2>Welcome, ${name}!</h2>
-        <p>Your resident account has been created. Use the credentials below to log in.</p>
-        <table>
-          <tr><td><strong>Email:</strong></td><td>${email}</td></tr>
-          <tr><td><strong>Password:</strong></td><td>${password}</td></tr>
-        </table>
-        <p>Please change your password after your first login.</p>
-        <p>– The SoAI Team</p>
-      `,
-    });
-  } catch (err) {
-    logger.error(`Failed to send welcome email to ${email}: ${err.message}`);
-  }
-};
+const { sendResidentWelcomeEmail } = require('../services/email.service');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Joi schemas
@@ -153,13 +106,15 @@ const createUser = asyncHandler(async (req, res) => {
     societyId,
   });
 
-  // 5. Fire-and-forget welcome email
-  sendWelcomeEmail({
-    name:        user.name,
-    email:       user.email,
-    password:    plainPassword,
-    societyName: req.user.societyName || '',
-  });
+  sendResidentWelcomeEmail(
+    {
+      name:        user.name,
+      email:       user.email,
+      flatNumber:  user.flatNumber,
+    },
+    plainPassword,
+    req.user.societyName || 'your society',
+  );
 
   return ApiResponse.created('User created successfully.', sanitizeUser(user)).send(res);
 });
@@ -430,7 +385,15 @@ const bulkCreateUsers = asyncHandler(async (req, res) => {
   for (const doc of insertedDocs) {
     const plain = passwordMap.get(doc.email.toLowerCase());
     if (plain) {
-      sendWelcomeEmail({ name: doc.name, email: doc.email, password: plain, societyName: '' });
+      sendResidentWelcomeEmail(
+        {
+          name:       doc.name,
+          email:      doc.email,
+          flatNumber: doc.flatNumber,
+        },
+        plain,
+        req.user.societyName || 'your society',
+      );
     }
   }
 

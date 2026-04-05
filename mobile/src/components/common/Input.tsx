@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,13 +7,20 @@ import {
   StyleSheet,
   ViewStyle,
   KeyboardTypeOptions,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolateColor,
+  interpolate,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Radius } from '@/theme';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 interface InputProps {
   label?: string;
@@ -29,11 +36,10 @@ interface InputProps {
   keyboardType?: KeyboardTypeOptions;
   editable?: boolean;
   style?: ViewStyle;
+  /** `constrained`: max 90% width, centered — ideal for auth & narrow forms */
+  layout?: 'full' | 'constrained';
+  onBlur?: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 
 const Input: React.FC<InputProps> = ({
   label,
@@ -49,42 +55,58 @@ const Input: React.FC<InputProps> = ({
   keyboardType = 'default',
   editable = true,
   style,
+  layout = 'full',
+  onBlur,
 }) => {
+  const { width: screenW } = useWindowDimensions();
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const focus = useSharedValue(0);
 
   const isPassword = secureTextEntry;
   const secure = isPassword && !showPassword;
 
-  const borderColor = error
-    ? Colors.error
-    : isFocused
-    ? Colors.primary
-    : Colors.border;
+  useEffect(() => {
+    focus.value = withTiming(isFocused && !error ? 1 : 0, { duration: 180 });
+  }, [isFocused, error, focus]);
+
+  const animatedContainer = useAnimatedStyle(() => {
+    const borderColor = error
+      ? Colors.error
+      : interpolateColor(focus.value, [0, 1], [Colors.border, Colors.primary]);
+
+    return {
+      borderColor,
+      shadowOpacity: error ? 0 : interpolate(focus.value, [0, 1], [0, 0.18]),
+      shadowRadius: interpolate(focus.value, [0, 1], [0, 10]),
+    };
+  });
+
+  const constrainedStyle =
+    layout === 'constrained'
+      ? { width: Math.min(screenW * 0.9, 420), alignSelf: 'center' as const }
+      : undefined;
 
   return (
-    <View style={[styles.wrapper, style]}>
-      {/* Label */}
-      {label ? (
-        <Text style={styles.label}>{label}</Text>
-      ) : null}
+    <View style={[styles.wrapper, constrainedStyle, style]}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
 
-      {/* Input row */}
-      <View
+      <AnimatedView
         style={[
           styles.container,
-          { borderColor },
+          animatedContainer,
+          Platform.OS === 'android' && isFocused && !error && styles.androidFocusElev,
           multiline && styles.multilineContainer,
           !editable && styles.disabled,
         ]}
       >
-        {leftIcon && <View style={styles.leftIcon}>{leftIcon}</View>}
+        {leftIcon ? <View style={styles.leftIcon}>{leftIcon}</View> : null}
 
         <TextInput
           style={[
             styles.input,
             leftIcon ? styles.inputWithLeft : undefined,
-            (rightIcon || isPassword) ? styles.inputWithRight : undefined,
+            rightIcon || isPassword ? styles.inputWithRight : undefined,
             multiline && styles.multilineInput,
           ]}
           placeholder={placeholder}
@@ -97,15 +119,17 @@ const Input: React.FC<InputProps> = ({
           numberOfLines={multiline ? numberOfLines : undefined}
           editable={editable}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
+          onBlur={() => {
+            setIsFocused(false);
+            onBlur?.();
+          }}
           autoCapitalize={isPassword ? 'none' : 'sentences'}
           autoCorrect={!isPassword}
           textAlignVertical={multiline ? 'top' : 'center'}
           selectionColor={Colors.primary}
         />
 
-        {/* Password toggle */}
-        {isPassword && (
+        {isPassword ? (
           <TouchableOpacity
             style={styles.rightIcon}
             onPress={() => setShowPassword((v) => !v)}
@@ -117,15 +141,13 @@ const Input: React.FC<InputProps> = ({
               color={Colors.textMuted}
             />
           </TouchableOpacity>
-        )}
+        ) : null}
 
-        {/* Custom right icon (shown only when not a password field) */}
-        {!isPassword && rightIcon && (
+        {!isPassword && rightIcon ? (
           <View style={styles.rightIcon}>{rightIcon}</View>
-        )}
-      </View>
+        ) : null}
+      </AnimatedView>
 
-      {/* Error */}
       {error ? (
         <View style={styles.errorRow}>
           <Icon name="alert-circle-outline" size={13} color={Colors.error} />
@@ -136,13 +158,10 @@ const Input: React.FC<InputProps> = ({
   );
 };
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
   wrapper: {
     marginBottom: Spacing.md,
+    width: '100%',
   },
   label: {
     fontSize: 12,
@@ -157,9 +176,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.bgInput,
     borderWidth: 1.5,
-    borderRadius: Radius.md,
+    borderRadius: Radius.input,
     minHeight: 48,
     paddingHorizontal: Spacing.md,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  androidFocusElev: {
+    elevation: 3,
   },
   multilineContainer: {
     alignItems: 'flex-start',
@@ -176,7 +200,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 16,
     color: Colors.textPrimary,
     paddingVertical: 0,
   },
@@ -193,8 +217,8 @@ const styles = StyleSheet.create({
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 5,
-    gap: 4,
+    marginTop: Spacing.xs,
+    gap: Spacing.xs,
   },
   errorText: {
     fontSize: 12,
@@ -203,4 +227,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Input;
+export default React.memo(Input);

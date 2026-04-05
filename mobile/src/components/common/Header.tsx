@@ -4,9 +4,8 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
-  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing } from '@/theme';
@@ -41,13 +40,18 @@ const Header: React.FC<HeaderProps> = ({
   showBack = false,
 }) => {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleBack = () => {
     navigation.goBack();
   };
 
+  /** Single top inset here — screens should use a plain `View` root (no extra SafeArea top). */
+  const padTop = insets.top + Spacing.xs;
+  const barHeight = 44;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: padTop, minHeight: barHeight + padTop }]}>
       {/* Left slot */}
       <View style={styles.side}>
         {showBack && (
@@ -116,20 +120,15 @@ const Header: React.FC<HeaderProps> = ({
 // Styles
 // ---------------------------------------------------------------------------
 
-const STATUS_BAR_HEIGHT =
-  Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) : 0;
-
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.bg,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
-    paddingTop: STATUS_BAR_HEIGHT + Spacing.sm,
-    paddingBottom: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    minHeight: 56 + STATUS_BAR_HEIGHT,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
   },
   side: {
     width: 44,
@@ -150,7 +149,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 1,
+    marginTop: Spacing.xs,
   },
   iconButton: {
     width: 36,

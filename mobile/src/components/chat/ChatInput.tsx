@@ -144,20 +144,21 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
     backgroundColor: Colors.bg,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
   },
   inputWrapper: {
     flex: 1,
     backgroundColor: Colors.bgInput,
-    borderRadius: Radius.xl,
-    borderWidth: 1.5,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
     borderColor: Colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
     marginRight: Spacing.sm,
     justifyContent: 'center',
   },
@@ -183,4 +184,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ChatInput;
+export default React.memo(ChatInput);

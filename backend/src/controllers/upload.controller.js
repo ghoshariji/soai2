@@ -21,8 +21,7 @@
  *   uploadExcel   POST /upload/excel   (society_admin)
  */
 
-const ExcelJS    = require('exceljs');
-const nodemailer = require('nodemailer');
+const ExcelJS = require('exceljs');
 
 const User         = require('../models/User');
 const Subscription = require('../models/Subscription');
@@ -33,67 +32,7 @@ const {
   generatePassword,
 } = require('../utils/helpers');
 const logger = require('../utils/logger');
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mail transport (shared, lazy-initialised once)
-// ─────────────────────────────────────────────────────────────────────────────
-let _mailer = null;
-
-const getMailer = () => {
-  if (_mailer) return _mailer;
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    logger.warn('[upload] SMTP credentials not configured – welcome emails will be skipped.');
-    return null;
-  }
-
-  _mailer = nodemailer.createTransport({
-    host:   SMTP_HOST,
-    port:   parseInt(SMTP_PORT, 10) || 587,
-    secure: parseInt(SMTP_PORT, 10) === 465,
-    auth:   { user: SMTP_USER, pass: SMTP_PASS },
-  });
-
-  return _mailer;
-};
-
-/**
- * Send a welcome e-mail to a newly created resident.
- * Designed to be called fire-and-forget; never throws.
- *
- * @param {object} opts
- * @param {string} opts.name
- * @param {string} opts.email
- * @param {string} opts.password   Plain-text generated password
- * @param {string} [opts.societyName]
- */
-const sendWelcomeEmail = async ({ name, email, password, societyName = '' }) => {
-  const mailer = getMailer();
-  if (!mailer) return;
-
-  try {
-    await mailer.sendMail({
-      from: `"${process.env.MAIL_FROM_NAME || 'SoAI'}" <${process.env.SMTP_USER}>`,
-      to:   email,
-      subject: `Welcome to ${societyName || 'your society'} – Your account details`,
-      html: `
-        <h2>Welcome, ${name}!</h2>
-        <p>Your resident account has been created by your society administrator.</p>
-        <p>Use the credentials below to log in:</p>
-        <table cellpadding="4">
-          <tr><td><strong>Email:</strong></td><td>${email}</td></tr>
-          <tr><td><strong>Password:</strong></td><td>${password}</td></tr>
-        </table>
-        <p style="color:#c00"><strong>Please change your password immediately after your first login.</strong></p>
-        <p>– The SoAI Team</p>
-      `,
-    });
-    logger.info(`[upload] Welcome email sent to ${email}.`);
-  } catch (err) {
-    logger.error(`[upload] Failed to send welcome email to ${email}: ${err.message}`);
-  }
-};
+const { sendResidentWelcomeEmail } = require('../services/email.service');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal validation helpers
@@ -420,12 +359,15 @@ const uploadExcel = asyncHandler(async (req, res) => {
     const plain       = passwordMap.get(doc.email.toLowerCase());
     const societyName = req.user.societyName || '';
     if (plain) {
-      sendWelcomeEmail({
-        name:   doc.name,
-        email:  doc.email,
-        password: plain,
-        societyName,
-      });
+      sendResidentWelcomeEmail(
+        {
+          name:       doc.name,
+          email:      doc.email,
+          flatNumber: doc.flatNumber,
+        },
+        plain,
+        societyName || 'your society',
+      );
     }
   }
 

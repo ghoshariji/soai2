@@ -108,6 +108,31 @@ const markMessagesRead = async (filter, userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getChatDirectory
+// GET /chat/directory
+//
+// Lists active society members (excluding the current user) so residents can
+// start a personal chat without society_admin-only GET /users.
+// ─────────────────────────────────────────────────────────────────────────────
+const getChatDirectory = asyncHandler(async (req, res) => {
+  const societyId = requireSocietyId(req.user);
+  const currentId   = req.user.id;
+
+  const users = await User.find({
+    societyId,
+    isDeleted: false,
+    status:    'active',
+    _id:       { $ne: new mongoose.Types.ObjectId(currentId) },
+  })
+    .select('name profilePhoto flatNumber role')
+    .sort({ name: 1 })
+    .limit(500)
+    .lean();
+
+  return ApiResponse.ok('Directory fetched successfully.', users).send(res);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // getPersonalMessages
 // GET /chat/personal/:userId?page&limit
 //
@@ -602,6 +627,7 @@ const getConversations = asyncHandler(async (req, res) => {
 // Exports
 // ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
+  getChatDirectory,
   getPersonalMessages,
   sendPersonalMessage,
   getGroupMessages,

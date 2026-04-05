@@ -60,18 +60,18 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.md,
+    padding: Spacing.lg,
     overflow: 'hidden',
   },
   shadow: Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
     },
     android: {
-      elevation: 4,
+      elevation: 2,
     },
     default: {},
   }) as ViewStyle,

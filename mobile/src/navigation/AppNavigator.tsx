@@ -2,11 +2,13 @@ import React, { useEffect, createRef } from 'react';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { StatusBar } from 'react-native';
 import Toast from 'react-native-toast-message';
+import { toastConfig } from '@/utils/toast';
 
 import { useAppSelector, useAppDispatch } from '@/store';
 import { getMeThunk } from '@/store/slices/authSlice';
 import { getAccessToken } from '@/services/storage';
 import { socketService } from '@/services/socket';
+import { setNavigationRef } from '@/services/api';
 
 import AuthNavigator from './AuthNavigator';
 import SuperAdminNavigator from './SuperAdminNavigator';
@@ -54,14 +56,17 @@ const AppNavigator: React.FC = () => {
   };
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => setNavigationRef(navigationRef.current)}
+    >
       <StatusBar
         barStyle="light-content"
         backgroundColor={Colors.bg}
         translucent={false}
       />
       {getNavigator()}
-      <Toast />
+      <Toast config={toastConfig} topOffset={52} />
     </NavigationContainer>
   );
 };

@@ -1,26 +1,39 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, Modal, Alert, ActivityIndicator, RefreshControl,
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  ActivityIndicator,
+  RefreshControl,
+  Platform,
 } from 'react-native';
-import { subscriptionService } from '@/services/api';
+import {
+  subscriptionService,
+  getApiErrorMessage,
+  type PaginatedResponse,
+} from '@/services/api';
 import Badge from '@/components/common/Badge';
 import Card from '@/components/common/Card';
 import Header from '@/components/common/Header';
 import Button from '@/components/common/Button';
 import EmptyState from '@/components/common/EmptyState';
 import { Colors, Spacing, Typography, Radius } from '@/theme';
-import Toast from 'react-native-toast-message';
+import { notify } from '@/utils/toast';
 
 interface Subscription {
   _id: string;
-  societyId: { _id: string; name: string; city: string };
+  society?: { _id: string; name: string; city?: string };
   plan: string;
   expiryDate: string;
   status: string;
   daysRemaining: number;
-  features: Record<string, any>;
-  price: number;
+  computedStatus?: string;
+  features?: Record<string, unknown>;
+  price?: number;
 }
 
 const SubscriptionScreen: React.FC = () => {
@@ -39,13 +52,19 @@ const SubscriptionScreen: React.FC = () => {
     try {
       if (refresh) setRefreshing(true);
       const res = await subscriptionService.getAll({ page: p, limit: 20 });
-      const data = res.data?.subscriptions || [];
-      if (p === 1) setSubscriptions(data);
-      else setSubscriptions((prev) => [...prev, ...data]);
-      if (data.length < 20) setHasMore(false);
+      const body = res.data as PaginatedResponse<Subscription>;
+      if (body.success === false) {
+        throw new Error(body.message || 'Failed to load subscriptions');
+      }
+      const rows = Array.isArray(body.data) ? body.data : [];
+      if (p === 1) setSubscriptions(rows);
+      else setSubscriptions((prev) => [...prev, ...rows]);
+      const hasNext = body.meta?.hasNextPage ?? false;
+      setHasMore(hasNext);
       setPage(p);
-    } catch {
-      Toast.show({ type: 'error', text1: 'Failed to load subscriptions' });
+    } catch (e) {
+      if (p === 1) setSubscriptions([]);
+      notify.error('Failed to load subscriptions', getApiErrorMessage(e));
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -57,20 +76,34 @@ const SubscriptionScreen: React.FC = () => {
   const openEdit = (sub: Subscription) => {
     setSelectedSub(sub);
     setNewPlan(sub.plan);
-    setNewExpiry(sub.expiryDate.split('T')[0]);
+    const iso = sub.expiryDate ? String(sub.expiryDate).split('T')[0] : '';
+    setNewExpiry(iso);
     setEditModal(true);
   };
 
   const handleSave = async () => {
-    if (!selectedSub) return;
+    if (!selectedSub?.society?._id) {
+      notify.error('Missing society', 'This subscription has no linked society.');
+      return;
+    }
+    const trimmed = newExpiry.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      notify.error('Invalid date', 'Use expiry as YYYY-MM-DD.');
+      return;
+    }
+    const expiryIso = `${trimmed}T23:59:59.999Z`;
+
     setSaving(true);
     try {
-      await subscriptionService.update(selectedSub.societyId._id, { plan: newPlan, expiryDate: newExpiry });
-      Toast.show({ type: 'success', text1: 'Subscription updated' });
+      await subscriptionService.update(String(selectedSub.society._id), {
+        plan: newPlan,
+        expiryDate: expiryIso,
+      });
+      notify.success('Subscription updated', 'Changes saved successfully.');
       setEditModal(false);
       fetchSubs(1, false);
-    } catch {
-      Toast.show({ type: 'error', text1: 'Update failed' });
+    } catch (err) {
+      notify.error('Update failed', getApiErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -84,16 +117,19 @@ const SubscriptionScreen: React.FC = () => {
 
   const renderItem = ({ item }: { item: Subscription }) => {
     const days = item.daysRemaining;
-    const expired = item.status === 'expired' || days <= 0;
+    const expired =
+      item.computedStatus === 'expired' ||
+      item.status === 'expired' ||
+      days <= 0;
 
     return (
       <Card style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.flex}>
-            <Text style={styles.societyName}>{item.societyId?.name}</Text>
-            <Text style={styles.city}>{item.societyId?.city}</Text>
+            <Text style={styles.societyName}>{item.society?.name ?? 'Society'}</Text>
+            <Text style={styles.city}>{item.society?.city ?? ''}</Text>
           </View>
-          <Badge label={item.plan.toUpperCase()} variant="info" />
+          <Badge label={(item.plan ?? '—').toUpperCase()} variant="info" />
         </View>
         <View style={styles.row}>
           <View>
@@ -109,7 +145,10 @@ const SubscriptionScreen: React.FC = () => {
           </View>
           <View>
             <Text style={styles.label}>Status</Text>
-            <Badge label={item.status.toUpperCase()} variant={item.status === 'active' ? 'success' : 'error'} />
+            <Badge
+              label={(item.status ?? '—').toUpperCase()}
+              variant={item.status === 'active' ? 'success' : 'error'}
+            />
           </View>
         </View>
         <Button title="Edit Subscription" variant="outline" size="sm" onPress={() => openEdit(item)} style={styles.editBtn} />
@@ -130,13 +169,29 @@ const SubscriptionScreen: React.FC = () => {
       <Header title="Subscriptions" subtitle={`${subscriptions.length} total`} />
       <FlatList
         data={subscriptions}
-        keyExtractor={(item) => item._id}
+        keyExtractor={(item, index) =>
+          item._id != null && item._id !== ''
+            ? String(item._id)
+            : `sub-${item.society?._id ?? index}`
+        }
         renderItem={renderItem}
+        initialNumToRender={10}
+        windowSize={5}
+        maxToRenderPerBatch={10}
+        removeClippedSubviews={Platform.OS === 'android'}
         contentContainerStyle={styles.list}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchSubs(1, true)} tintColor={Colors.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchSubs(1, true)}
+            tintColor={Colors.primary}
+          />
+        }
         onEndReached={() => hasMore && fetchSubs(page + 1)}
         onEndReachedThreshold={0.3}
-        ListEmptyComponent={<EmptyState title="No Subscriptions" message="No subscriptions found" />}
+        ListEmptyComponent={
+          <EmptyState title="No Subscriptions" message="No subscriptions found" />
+        }
       />
 
       <Modal visible={editModal} animationType="slide" transparent onRequestClose={() => setEditModal(false)}>

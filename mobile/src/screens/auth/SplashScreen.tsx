@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(108, 99, 255, 0.06)',
+    backgroundColor: 'rgba(79, 70, 229, 0.07)',
   },
   bgCircle2: {
     position: 'absolute',
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     width: 250,
     height: 250,
     borderRadius: 125,
-    backgroundColor: 'rgba(108, 99, 255, 0.04)',
+    backgroundColor: 'rgba(79, 70, 229, 0.05)',
   },
   logoWrapper: {
     alignItems: 'center',

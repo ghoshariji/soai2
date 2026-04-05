@@ -1,12 +1,7 @@
 import { io, Socket } from 'socket.io-client';
+import { getSocketBaseUrl } from '@/config/apiBase';
 
-// ---------------------------------------------------------------------------
-// Socket server URL (mirrors api.ts base)
-// ---------------------------------------------------------------------------
-
-const SOCKET_URL = __DEV__
-  ? 'http://10.0.2.2:5000'
-  : (process.env.SOCKET_URL ?? process.env.API_URL?.replace('/api', '') ?? 'https://api.soai.app');
+const SOCKET_URL = getSocketBaseUrl();
 
 // ---------------------------------------------------------------------------
 // Module-level singleton
@@ -160,6 +155,10 @@ export const SocketEvents = {
   // Announcements / posts
   NEW_ANNOUNCEMENT: 'new_announcement',
   NEW_POST: 'new_post',
+  LIKE_UPDATED: 'like_updated',
+  NEW_COMMENT: 'new_comment',
+  COMMENT_DELETED: 'comment_deleted',
+  POST_DELETED: 'post_deleted',
 
   // Complaints
   COMPLAINT_UPDATED: 'complaint_updated',
@@ -167,7 +166,7 @@ export const SocketEvents = {
 
 export type SocketEvent = (typeof SocketEvents)[keyof typeof SocketEvents];
 
-export default {
+export const socketService = {
   connect,
   disconnect,
   emit,
@@ -177,3 +176,5 @@ export default {
   isConnected,
   SocketEvents,
 };
+
+export default socketService;

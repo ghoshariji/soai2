@@ -111,10 +111,45 @@ const loginSchema = Joi.object({
     }),
 
   password: Joi.string()
+    .trim()
     .min(1)
     .max(128)
     .required()
     .messages({ 'any.required': 'Password is required' }),
+});
+
+/** POST /auth/forgot-password */
+const forgotPasswordSchema = Joi.object({
+  email: Joi.string()
+    .trim()
+    .lowercase()
+    .email({ tlds: { allow: false } })
+    .max(255)
+    .required()
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required',
+    }),
+});
+
+/** POST /auth/reset-password */
+const resetPasswordSchema = Joi.object({
+  token: Joi.string().trim().min(32).max(128).required().messages({
+    'any.required': 'Reset token is required',
+    'string.min':   'Invalid reset token',
+  }),
+
+  newPassword: passwordField.required().messages({
+    'any.required': 'New password is required',
+  }),
+
+  confirmNewPassword: Joi.string()
+    .valid(Joi.ref('newPassword'))
+    .required()
+    .messages({
+      'any.only':     'Passwords must match',
+      'any.required': 'Please confirm your new password',
+    }),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -158,9 +193,12 @@ const createSocietySchema = Joi.object({
     }),
 
   plan: Joi.string()
-    .valid('basic', 'standard', 'premium', 'enterprise')
+    .valid('basic', 'standard', 'premium', 'enterprise', 'custom')
     .default('basic')
-    .messages({ 'any.only': 'Plan must be one of: basic, standard, premium, enterprise' }),
+    .messages({
+      'any.only':
+        'Plan must be one of: basic, standard, premium, enterprise, custom',
+    }),
 
   expiryDate: futureDateField.required().messages({ 'any.required': 'Expiry date is required' }),
 });
@@ -252,7 +290,7 @@ const updateUserSchema = Joi.object({
 
 /**
  * createPostSchema
- * Used when a resident or admin creates a post in the society feed.
+ * Used when a society_admin creates a post in the society feed (residents cannot post via API).
  */
 const createPostSchema = Joi.object({
   content: Joi.string()
@@ -497,6 +535,8 @@ module.exports = {
   // Auth
   registerSchema,
   loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 
   // Society
   createSocietySchema,

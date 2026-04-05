@@ -58,12 +58,20 @@ const initialState: AuthState = {
 // ---------------------------------------------------------------------------
 
 function normaliseUser(raw: Record<string, unknown>): User {
+  const sid = raw.societyId ?? raw.society;
+  const societyIdStr =
+    sid && typeof sid === 'object' && sid !== null && '_id' in sid
+      ? String((sid as { _id: unknown })._id)
+      : sid
+        ? String(sid)
+        : null;
+
   return {
     id: (raw._id ?? raw.id ?? '') as string,
     name: (raw.name ?? '') as string,
     email: (raw.email ?? '') as string,
     role: (raw.role ?? 'user') as UserRole,
-    societyId: (raw.societyId ?? raw.society ?? null) as string | null,
+    societyId: societyIdStr,
     profilePhoto: (raw.profilePhoto ?? raw.avatar ?? null) as string | null,
     status: (raw.status ?? 'active') as UserStatus,
     flatNumber: (raw.flatNumber ?? null) as string | null,

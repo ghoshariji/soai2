@@ -99,13 +99,13 @@ export const fetchNotifications = createAsyncThunk<
 >('notifications/fetchAll', async ({ page = 1, limit = 20, replace = false }, { rejectWithValue }) => {
   try {
     const { data } = await notificationService.getAll({ page, limit });
-    const notifications = (data.data as Record<string, unknown>[]).map(
-      normaliseNotification,
-    );
+    const payload = data.data;
+    const list = payload?.notifications ?? [];
+    const notifications = list.map(normaliseNotification);
     return {
       notifications,
       page,
-      totalPages: data.totalPages ?? 1,
+      totalPages: payload?.pages ?? 1,
       replace,
     };
   } catch (error) {

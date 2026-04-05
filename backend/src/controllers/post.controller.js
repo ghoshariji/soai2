@@ -68,6 +68,72 @@ const deleteCloudinaryImages = async (images = []) => {
 };
 
 /**
+ * Serialise a post document for API / Socket.IO (plain JSON-friendly).
+ */
+const serializePost = (doc) => {
+  if (!doc) return null;
+  const p = doc.toObject ? doc.toObject() : { ...doc };
+  const author = p.authorId;
+  const authorOut =
+    author && typeof author === 'object' && author._id
+      ? {
+          _id:           String(author._id),
+          name:          author.name,
+          profilePhoto:  author.profilePhoto ?? null,
+          flatNumber:    author.flatNumber ?? null,
+        }
+      : p.authorId;
+
+  return {
+    ...p,
+    _id:         String(p._id),
+    societyId:   p.societyId ? String(p.societyId) : p.societyId,
+    authorId:    authorOut,
+    likes:       (p.likes || []).map((id) => String(id)),
+    likesCount:  p.likesCount ?? (p.likes || []).length,
+    images:      (p.images || []).map((img) =>
+      typeof img === 'string' ? { url: img, publicId: '' } : { url: img.url, publicId: img.publicId || '' },
+    ),
+    commentsCount: p.commentsCount ?? 0,
+    createdAt:   p.createdAt,
+    updatedAt:   p.updatedAt,
+    isPinned:    Boolean(p.isPinned),
+  };
+};
+
+const serializeComment = (doc) => {
+  if (!doc) return null;
+  const c = doc.toObject ? doc.toObject() : { ...doc };
+  const author = c.authorId;
+  const authorOut =
+    author && typeof author === 'object' && author._id
+      ? {
+          _id:          String(author._id),
+          name:         author.name,
+          profilePhoto: author.profilePhoto ?? null,
+          flatNumber:   author.flatNumber ?? null,
+        }
+      : c.authorId;
+
+  return {
+    ...c,
+    _id:       String(c._id),
+    postId:    String(c.postId),
+    societyId: c.societyId ? String(c.societyId) : c.societyId,
+    authorId:  authorOut,
+    parentId:  c.parentId ? String(c.parentId) : null,
+    content:   c.content,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+  };
+};
+
+const emitToSociety = (req, societyId, event, payload) => {
+  if (!req.io || !societyId) return;
+  req.io.to(`society_${societyId}`).emit(event, payload);
+};
+
+/**
  * Fan-out a notification to every active, non-deleted society member,
  * excluding the actor.  Uses insertMany for efficiency on large societies.
  * Fire-and-forget – caller should .catch(() => {}).
@@ -146,7 +212,7 @@ const sendNotification = async ({
  * Behaviour:
  *   - Requires either a non-empty content string OR at least one image.
  *   - Stores Cloudinary URLs from req.files if multer has already processed them.
- *   - Fans out a 'post_like' notification to all other society members (async).
+ *   - Fans out a `new_post` notification to other society members (async).
  *   - Emits a 'new_post' socket event to the society room via req.io.
  */
 const createPost = asyncHandler(async (req, res) => {
@@ -184,7 +250,7 @@ const createPost = asyncHandler(async (req, res) => {
       broadcastNotification({
         societyId,
         excludeUserId: authorId,
-        type:  'post_like',
+        type:  'new_post',
         title: 'New Post in Your Society',
         body:  `${author?.name ?? 'A member'} shared a new post.`,
         data:  { postId: post._id.toString() },
@@ -192,18 +258,15 @@ const createPost = asyncHandler(async (req, res) => {
     })
     .catch((err) => logger.warn('[createPost] broadcast notification failed:', err));
 
-  // Emit socket event if socket.io is attached to req by middleware
-  if (req.io) {
-    req.io.to(`society_${societyId}`).emit('new_post', {
-      postId:    post._id,
-      authorId,
-      societyId,
-    });
-  }
+  const populated = await Post.findById(post._id)
+    .populate({ path: 'authorId', select: 'name profilePhoto flatNumber' })
+    .lean();
+
+  emitToSociety(req, societyId, 'new_post', { post: serializePost(populated) });
 
   logger.info(`[post] User ${authorId} created post ${post._id} in society ${societyId}.`);
 
-  return ApiResponse.created('Post created successfully.', post).send(res);
+  return ApiResponse.created('Post created successfully.', serializePost(populated)).send(res);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -278,21 +341,19 @@ const getPost = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 /**
  * Update a post's content.
- * Only the original author or a society_admin / super_admin may update.
+ * Only society_admin / super_admin may update (enforced by route + this check).
  */
 const updatePost = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { id: userId, role, societyId } = req.user;
+  const { role, societyId } = req.user;
 
   if (!mongoose.isValidObjectId(id)) throw APIError.badRequest('Invalid post ID.');
 
   const post = await Post.findOne({ _id: id, societyId, isDeleted: false });
   if (!post) throw APIError.notFound('Post not found.');
 
-  const isAuthor = post.authorId.toString() === userId;
-  const isAdmin  = role === 'society_admin' || role === 'super_admin';
-
-  if (!isAuthor && !isAdmin) {
+  const isAdmin = role === 'society_admin' || role === 'super_admin';
+  if (!isAdmin) {
     throw APIError.forbidden('You are not allowed to update this post.');
   }
 
@@ -313,7 +374,11 @@ const updatePost = asyncHandler(async (req, res) => {
   post.content = trimmed;
   await post.save();
 
-  return ApiResponse.ok('Post updated successfully.', post).send(res);
+  const updated = await Post.findById(post._id)
+    .populate({ path: 'authorId', select: 'name profilePhoto flatNumber' })
+    .lean();
+
+  return ApiResponse.ok('Post updated successfully.', serializePost(updated)).send(res);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,7 +387,7 @@ const updatePost = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 /**
  * Soft-delete a post.
- * - Only the original author or an admin may delete.
+ * - Only society_admin / super_admin may delete.
  * - Associated Cloudinary images are deleted asynchronously.
  * - All comments belonging to the post are also soft-deleted in bulk.
  */
@@ -335,10 +400,8 @@ const deletePost = asyncHandler(async (req, res) => {
   const post = await Post.findOne({ _id: id, societyId, isDeleted: false });
   if (!post) throw APIError.notFound('Post not found.');
 
-  const isAuthor = post.authorId.toString() === userId;
-  const isAdmin  = role === 'society_admin' || role === 'super_admin';
-
-  if (!isAuthor && !isAdmin) {
+  const isAdmin = role === 'society_admin' || role === 'super_admin';
+  if (!isAdmin) {
     throw APIError.forbidden('You are not allowed to delete this post.');
   }
 
@@ -357,6 +420,8 @@ const deletePost = asyncHandler(async (req, res) => {
   }
 
   logger.info(`[post] Post ${id} soft-deleted by user ${userId}.`);
+
+  emitToSociety(req, societyId, 'post_deleted', { postId: id });
 
   return ApiResponse.ok('Post deleted successfully.').send(res);
 });
@@ -414,9 +479,18 @@ const likePost = asyncHandler(async (req, res) => {
 
   await post.save();
 
+  const likesSerialized = post.likes.map((lid) => lid.toString());
+
+  emitToSociety(req, societyId, 'like_updated', {
+    postId:     id,
+    likesCount: post.likesCount,
+    likes:      likesSerialized,
+  });
+
   return ApiResponse.ok('Post like toggled.', {
     liked:      !alreadyLiked,
     likesCount: post.likesCount,
+    likes:      likesSerialized,
   }).send(res);
 });
 
@@ -534,7 +608,18 @@ const addComment = asyncHandler(async (req, res) => {
     select: 'name profilePhoto flatNumber',
   });
 
-  return ApiResponse.created('Comment added successfully.', populated).send(res);
+  const postAfter = await Post.findById(postId).select('commentsCount').lean();
+
+  emitToSociety(req, societyId, 'new_comment', {
+    postId:        postId,
+    comment:       serializeComment(populated),
+    commentsCount: postAfter?.commentsCount ?? 0,
+  });
+
+  return ApiResponse.created(
+    'Comment added successfully.',
+    serializeComment(populated),
+  ).send(res);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -543,12 +628,12 @@ const addComment = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 /**
  * Soft-delete a comment.
- * - Only the comment author or a society_admin / super_admin may delete.
+ * - Only society_admin / super_admin may delete.
  * - Decrements Post.commentsCount (floors at 0).
  */
 const deleteComment = asyncHandler(async (req, res) => {
   const { id: postId, commentId } = req.params;
-  const { id: userId, role, societyId } = req.user;
+  const { role, societyId } = req.user;
 
   if (!mongoose.isValidObjectId(postId))    throw APIError.badRequest('Invalid post ID.');
   if (!mongoose.isValidObjectId(commentId)) throw APIError.badRequest('Invalid comment ID.');
@@ -562,10 +647,8 @@ const deleteComment = asyncHandler(async (req, res) => {
 
   if (!comment) throw APIError.notFound('Comment not found.');
 
-  const isAuthor = comment.authorId.toString() === userId;
-  const isAdmin  = role === 'society_admin' || role === 'super_admin';
-
-  if (!isAuthor && !isAdmin) {
+  const isAdmin = role === 'society_admin' || role === 'super_admin';
+  if (!isAdmin) {
     throw APIError.forbidden('You are not allowed to delete this comment.');
   }
 
@@ -577,6 +660,14 @@ const deleteComment = asyncHandler(async (req, res) => {
     { _id: postId, commentsCount: { $gt: 0 } },
     { $inc: { commentsCount: -1 } }
   );
+
+  const postAfter = await Post.findById(postId).select('commentsCount').lean();
+
+  emitToSociety(req, societyId, 'comment_deleted', {
+    postId:        postId,
+    commentId:     String(commentId),
+    commentsCount: postAfter?.commentsCount ?? 0,
+  });
 
   return ApiResponse.ok('Comment deleted successfully.').send(res);
 });

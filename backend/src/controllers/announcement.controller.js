@@ -7,9 +7,18 @@ const User = require('../models/User');
 const { asyncHandler, APIError, paginate } = require('../utils/helpers');
 const { deleteImage } = require('../services/cloudinary.service');
 
+const PRIORITIES = new Set(['normal', 'important', 'urgent']);
+
 const createAnnouncement = asyncHandler(async (req, res) => {
-  const { title, description, priority = 'normal' } = req.body;
-  if (!title || !description) throw new APIError('Title and description are required', 400);
+  const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+  const description =
+    typeof req.body.description === 'string' ? req.body.description.trim() : '';
+  if (!title || !description) {
+    throw new APIError('Title and description are required', 400);
+  }
+
+  let priority = typeof req.body.priority === 'string' ? req.body.priority.trim() : 'normal';
+  if (!PRIORITIES.has(priority)) priority = 'normal';
 
   const societyId = req.user.societyId;
   const image = req.file ? req.file.path : '';
@@ -61,7 +70,7 @@ const createAnnouncement = asyncHandler(async (req, res) => {
 
 const getAnnouncements = asyncHandler(async (req, res) => {
   const { page = 1, limit = 15, priority } = req.query;
-  const { skip, take } = paginate(page, limit);
+  const { skip, limit: pageLimit } = paginate(page, limit);
   const societyId = req.user.societyId || req.query.societyId;
 
   const filter = { societyId, isDeleted: false };
@@ -72,7 +81,7 @@ const getAnnouncements = asyncHandler(async (req, res) => {
       .populate('createdBy', 'name profilePhoto')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(take)
+      .limit(pageLimit)
       .lean(),
     Announcement.countDocuments(filter),
   ]);
@@ -90,7 +99,7 @@ const getAnnouncements = asyncHandler(async (req, res) => {
       announcements: enriched,
       total,
       page: Number(page),
-      pages: Math.ceil(total / take),
+      pages: Math.ceil(total / pageLimit) || 1,
     },
   });
 });
@@ -126,9 +135,13 @@ const updateAnnouncement = asyncHandler(async (req, res) => {
   if (!announcement) throw new APIError('Announcement not found', 404);
 
   const { title, description, priority } = req.body;
-  if (title) announcement.title = title;
-  if (description) announcement.description = description;
-  if (priority) announcement.priority = priority;
+  if (typeof title === 'string' && title.trim()) announcement.title = title.trim();
+  if (typeof description === 'string' && description.trim()) {
+    announcement.description = description.trim();
+  }
+  if (typeof priority === 'string' && PRIORITIES.has(priority.trim())) {
+    announcement.priority = priority.trim();
+  }
 
   if (req.file) {
     if (announcement.imagePublicId) await deleteImage(announcement.imagePublicId);
@@ -167,7 +180,10 @@ const markAsRead = asyncHandler(async (req, res) => {
     (r) => r.userId?.toString() === req.user.id
   );
   if (!alreadyRead) {
-    announcement.readBy.push({ userId: req.user.id, readAt: new Date() });
+    announcement.readBy.push({
+      userId: new mongoose.Types.ObjectId(req.user.id),
+      readAt: new Date(),
+    });
     await announcement.save();
   }
 

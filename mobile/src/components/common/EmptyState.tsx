@@ -1,12 +1,8 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-} from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { Colors, Spacing, Radius } from '@/theme';
+import { Colors, Spacing, Typography } from '@/theme';
+import Button from '@/components/common/Button';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,13 +44,9 @@ const EmptyState: React.FC<EmptyStateProps> = ({
 
       {/* Optional action button */}
       {actionLabel && onAction ? (
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={onAction}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.actionLabel}>{actionLabel}</Text>
-        </TouchableOpacity>
+        <View style={styles.actionWrap}>
+          <Button title={actionLabel} onPress={onAction} size="md" />
+        </View>
       ) : null}
     </View>
   );
@@ -74,9 +66,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   iconWrapper: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: Colors.bgCard,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -85,32 +77,22 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
+    ...Typography.h2,
     color: Colors.textPrimary,
     textAlign: 'center',
     marginBottom: Spacing.sm,
-    letterSpacing: 0.2,
   },
   message: {
-    fontSize: 14,
+    ...Typography.body2,
     color: Colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    letterSpacing: 0.1,
+    maxWidth: 320,
   },
-  actionButton: {
-    marginTop: Spacing.lg,
-    paddingVertical: 12,
+  actionWrap: {
+    marginTop: Spacing.xl,
+    width: '100%',
+    maxWidth: 280,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.md,
-  },
-  actionLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.white,
-    letterSpacing: 0.2,
   },
 });
 

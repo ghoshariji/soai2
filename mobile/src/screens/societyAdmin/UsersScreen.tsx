@@ -370,6 +370,11 @@ const UsersScreen: React.FC = () => {
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.3}
+          initialNumToRender={10}
+          windowSize={5}
+          maxToRenderPerBatch={10}
+          removeClippedSubviews={Platform.OS === 'android'}
+          updateCellsBatchingPeriod={50}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           showsVerticalScrollIndicator={false}

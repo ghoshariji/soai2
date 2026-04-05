@@ -208,10 +208,14 @@ cd android && ./gradlew bundleRelease
 
 ## Default Credentials (after seeding)
 
-| Role          | Email                       | Password        |
-|---------------|-----------------------------|-----------------|
-| Super Admin   | superadmin@soai.com         | SuperAdmin@123  |
-| Society Admin | admin@greenvalley.com       | Admin@1234      |
-| Resident      | rahul@greenvalley.com       | User@1234       |
+All seeded demo accounts (except super admin when `SUPER_ADMIN_PASSWORD` is set in `.env`) share **`SEED_USER_PASSWORD`**, default **`SamplePass12`** (12 characters).
+
+| Role          | Email                       | Notes                          |
+|---------------|-----------------------------|--------------------------------|
+| Super Admin   | superadmin@soai.com         | Same as others unless `SUPER_ADMIN_PASSWORD` is set |
+| Society Admin | admin@greenvalley.com       | Green Valley Society           |
+| Residents     | rahul@greenvalley.com, priya@…, etc. | Eight sample flats; see `backend/seeder.js` |
+
+Run `npm run seed` again to create missing residents and **reset all seed account passwords** to the current `SEED_USER_PASSWORD`.
 
 > ⚠️ Change all passwords immediately in production!

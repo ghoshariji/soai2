@@ -1,18 +1,21 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import HomeScreen from '@/screens/user/HomeScreen';
-import ChatListScreen from '@/screens/user/ChatListScreen';
+import ChatStackNavigator from '@/navigation/ChatStackNavigator';
 import AnnouncementsScreen from '@/screens/user/AnnouncementsScreen';
 import ComplaintsScreen from '@/screens/user/ComplaintsScreen';
 import ProfileScreen from '@/screens/user/ProfileScreen';
+import NotificationsScreen from '@/screens/user/NotificationsScreen';
+import GroupsScreen from '@/screens/user/GroupsScreen';
 
 import { Colors } from '@/theme';
 
 // ---------------------------------------------------------------------------
-// Tab param list
+// Param lists
 // ---------------------------------------------------------------------------
 
 export type UserTabParamList = {
@@ -23,8 +26,14 @@ export type UserTabParamList = {
   Profile: undefined;
 };
 
+export type UserStackParamList = {
+  UserTabs: undefined;
+  Notifications: undefined;
+  Groups: undefined;
+};
+
 // ---------------------------------------------------------------------------
-// Shared tab icon
+// Tab icon
 // ---------------------------------------------------------------------------
 
 interface TabIconProps {
@@ -52,86 +61,94 @@ const tabIconStyles = StyleSheet.create({
     borderRadius: 20,
   },
   focused: {
-    backgroundColor: 'rgba(108, 99, 255, 0.12)',
+    backgroundColor: 'rgba(79, 70, 229, 0.14)',
   },
 });
 
 // ---------------------------------------------------------------------------
-// Tab navigator
+// Bottom tabs (resident main)
 // ---------------------------------------------------------------------------
 
 const Tab = createBottomTabNavigator<UserTabParamList>();
 
-const UserNavigator: React.FC = () => {
-  return (
-    <Tab.Navigator
-      initialRouteName="Home"
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.textMuted,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarHideOnKeyboard: true,
+const UserTabNavigator: React.FC = () => (
+  <Tab.Navigator
+    initialRouteName="Home"
+    screenOptions={{
+      headerShown: false,
+      tabBarStyle: styles.tabBar,
+      tabBarActiveTintColor: Colors.primary,
+      tabBarInactiveTintColor: Colors.textMuted,
+      tabBarLabelStyle: styles.tabLabel,
+      tabBarHideOnKeyboard: true,
+    }}
+  >
+    <Tab.Screen
+      name="Home"
+      component={HomeScreen}
+      options={{
+        tabBarLabel: 'Home',
+        tabBarIcon: ({ focused, size }) => (
+          <TabIcon name="home" focused={focused} size={size} />
+        ),
       }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ focused, size }) => (
-            <TabIcon name="home" focused={focused} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Chat"
-        component={ChatListScreen}
-        options={{
-          tabBarLabel: 'Chat',
-          tabBarIcon: ({ focused, size }) => (
-            <TabIcon name="chatbubbles" focused={focused} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Announcements"
-        component={AnnouncementsScreen}
-        options={{
-          tabBarLabel: 'Notices',
-          tabBarIcon: ({ focused, size }) => (
-            <TabIcon name="megaphone" focused={focused} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Complaints"
-        component={ComplaintsScreen}
-        options={{
-          tabBarLabel: 'Complaints',
-          tabBarIcon: ({ focused, size }) => (
-            <TabIcon name="alert-circle" focused={focused} size={size} />
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ focused, size }) => (
-            <TabIcon name="person" focused={focused} size={size} />
-          ),
-        }}
-      />
-    </Tab.Navigator>
-  );
-};
+    />
+    <Tab.Screen
+      name="Chat"
+      component={ChatStackNavigator}
+      options={{
+        tabBarLabel: 'Chat',
+        tabBarIcon: ({ focused, size }) => (
+          <TabIcon name="chatbubbles" focused={focused} size={size} />
+        ),
+      }}
+    />
+    <Tab.Screen
+      name="Announcements"
+      component={AnnouncementsScreen}
+      options={{
+        tabBarLabel: 'Notices',
+        tabBarIcon: ({ focused, size }) => (
+          <TabIcon name="megaphone" focused={focused} size={size} />
+        ),
+      }}
+    />
+    <Tab.Screen
+      name="Complaints"
+      component={ComplaintsScreen}
+      options={{
+        tabBarLabel: 'Complaints',
+        tabBarIcon: ({ focused, size }) => (
+          <TabIcon name="alert-circle" focused={focused} size={size} />
+        ),
+      }}
+    />
+    <Tab.Screen
+      name="Profile"
+      component={ProfileScreen}
+      options={{
+        tabBarLabel: 'Profile',
+        tabBarIcon: ({ focused, size }) => (
+          <TabIcon name="person" focused={focused} size={size} />
+        ),
+      }}
+    />
+  </Tab.Navigator>
+);
 
 // ---------------------------------------------------------------------------
-// Styles
+// Root stack: tabs + auxiliary screens
 // ---------------------------------------------------------------------------
+
+const Stack = createNativeStackNavigator<UserStackParamList>();
+
+const UserNavigator: React.FC = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen name="UserTabs" component={UserTabNavigator} />
+    <Stack.Screen name="Notifications" component={NotificationsScreen} />
+    <Stack.Screen name="Groups" component={GroupsScreen} />
+  </Stack.Navigator>
+);
 
 const styles = StyleSheet.create({
   tabBar: {

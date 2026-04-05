@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { useSelector } from 'react-redux';
 import { dashboardService } from '../../services/api';
 import { Colors, Spacing, Radius } from '@/theme';
 import Badge from '@/components/common/Badge';
+import type { SocietyAdminTabParamList } from '@/navigation/SocietyAdminNavigator';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +50,8 @@ interface Announcement {
 interface DashboardData {
   totalUsers: number;
   activeUsers: number;
+  inactiveUsers: number;
+  blockedUsers: number;
   openComplaints: number;
   totalGroups: number;
   totalAnnouncements: number;
@@ -116,7 +121,42 @@ const StatCardItem: React.FC<StatCard> = ({ label, value, icon, color, bg }) => 
 // Screen
 // ---------------------------------------------------------------------------
 
+type TabNav = BottomTabNavigationProp<SocietyAdminTabParamList>;
+
+function mapRecentActivity(raw: Record<string, unknown>): {
+  complaints: Complaint[];
+  announcements: Announcement[];
+} {
+  const activity = (raw.recentActivity as Record<string, unknown>[]) ?? [];
+  const complaints: Complaint[] = [];
+  const announcements: Announcement[] = [];
+
+  for (const a of activity) {
+    if (a.type === 'complaint') {
+      complaints.push({
+        _id: String(a._id ?? ''),
+        title: String(a.title ?? ''),
+        status: (a.status ?? 'open') as Complaint['status'],
+        category: String(a.category ?? 'general'),
+        raisedBy: (a.raisedBy as Complaint['raisedBy']) ?? { name: '—' },
+        createdAt: String(a.createdAt ?? ''),
+      });
+    } else if (a.type === 'announcement') {
+      announcements.push({
+        _id: String(a._id ?? ''),
+        title: String(a.title ?? ''),
+        description: '',
+        priority: (a.priority ?? 'normal') as Announcement['priority'],
+        createdAt: String(a.createdAt ?? ''),
+      });
+    }
+  }
+
+  return { complaints, announcements };
+}
+
 const DashboardScreen: React.FC = () => {
+  const navigation = useNavigation<TabNav>();
   const user = useSelector((state: any) => state.auth.user);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,18 +166,25 @@ const DashboardScreen: React.FC = () => {
   const fetchDashboard = useCallback(async () => {
     try {
       setError(null);
-      const societyId = user?.societyId ?? '';
-      const res = await dashboardService.getSocietyAdminStats(societyId);
+      const res = await dashboardService.getSocietyAdminStats();
       const raw = res.data.data as Record<string, unknown>;
+      const users = raw.users as Record<string, number> | undefined;
+      const complaints = raw.complaints as Record<string, number> | undefined;
+      const groups = raw.groups as Record<string, number> | undefined;
+      const ann = raw.announcements as Record<string, number> | undefined;
+      const { complaints: rc, announcements: ra } = mapRecentActivity(raw);
+
       setData({
-        totalUsers: (raw.totalUsers as number) ?? 0,
-        activeUsers: (raw.activeUsers as number) ?? 0,
-        openComplaints: (raw.openComplaints as number) ?? 0,
-        totalGroups: (raw.totalGroups as number) ?? 0,
-        totalAnnouncements: (raw.totalAnnouncements as number) ?? 0,
-        resolvedComplaints: (raw.resolvedComplaints as number) ?? 0,
-        recentComplaints: (raw.recentComplaints as Complaint[]) ?? [],
-        recentAnnouncements: (raw.recentAnnouncements as Announcement[]) ?? [],
+        totalUsers: users?.total ?? 0,
+        activeUsers: users?.active ?? 0,
+        inactiveUsers: users?.inactive ?? 0,
+        blockedUsers: users?.blocked ?? 0,
+        openComplaints: complaints?.open ?? 0,
+        totalGroups: groups?.total ?? 0,
+        totalAnnouncements: ann?.total ?? 0,
+        resolvedComplaints: complaints?.resolved ?? 0,
+        recentComplaints: rc,
+        recentAnnouncements: ra,
         societyName: (raw.societyName as string) ?? undefined,
       });
     } catch {
@@ -146,7 +193,7 @@ const DashboardScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.societyId]);
+  }, []);
 
   useEffect(() => {
     fetchDashboard();
@@ -172,6 +219,20 @@ const DashboardScreen: React.FC = () => {
           icon: 'person-check-outline',
           color: Colors.success,
           bg: 'rgba(16,185,129,0.15)',
+        },
+        {
+          label: 'Inactive',
+          value: data.inactiveUsers,
+          icon: 'person-outline',
+          color: Colors.textMuted,
+          bg: 'rgba(107,114,128,0.15)',
+        },
+        {
+          label: 'Blocked',
+          value: data.blockedUsers,
+          icon: 'ban-outline',
+          color: Colors.error,
+          bg: 'rgba(239,68,68,0.12)',
         },
         {
           label: 'Open Complaints',
@@ -251,6 +312,51 @@ const DashboardScreen: React.FC = () => {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
+
+        <Text style={styles.sectionTitle}>Quick actions</Text>
+        <View style={styles.quickRow}>
+          <TouchableOpacity
+            style={styles.quickBtn}
+            onPress={() => navigation.navigate('Community', { screen: 'Feed' })}
+          >
+            <Icon name="newspaper-outline" size={22} color={Colors.primary} />
+            <Text style={styles.quickBtnText}>Community feed</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickBtn}
+            onPress={() => navigation.navigate('Community', { screen: 'Groups' })}
+          >
+            <Icon name="people-outline" size={22} color={Colors.primary} />
+            <Text style={styles.quickBtnText}>Groups</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickBtn}
+            onPress={() =>
+              navigation.navigate('Users', { screen: 'CreateUser' })
+            }
+          >
+            <Icon name="person-add-outline" size={22} color={Colors.primary} />
+            <Text style={styles.quickBtnText}>Add user</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickBtn}
+            onPress={() =>
+              navigation.navigate('Users', { screen: 'BulkUpload' })
+            }
+          >
+            <Icon name="cloud-upload-outline" size={22} color={Colors.primary} />
+            <Text style={styles.quickBtnText}>Upload Excel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickBtn}
+            onPress={() =>
+              navigation.navigate('Community', { screen: 'Announcements' })
+            }
+          >
+            <Icon name="megaphone-outline" size={22} color={Colors.primary} />
+            <Text style={styles.quickBtnText}>Announcement</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Stats Grid */}
         <Text style={styles.sectionTitle}>Overview</Text>
@@ -404,6 +510,30 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   errorText: { color: Colors.error, fontSize: 13, flex: 1 },
+  quickRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  quickBtn: {
+    flex: 1,
+    minWidth: '30%',
+    backgroundColor: Colors.bgCard,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    alignItems: 'center',
+    gap: 6,
+  },
+  quickBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    textAlign: 'center',
+  },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',

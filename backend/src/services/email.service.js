@@ -1,30 +1,138 @@
+'use strict';
+
+/**
+ * Central e-mail delivery via Nodemailer (SMTP).
+ *
+ * Environment (primary names — legacy aliases in resolveMailConfig):
+ *   EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS
+ *   EMAIL_FROM, EMAIL_FROM_NAME
+ *
+ * Legacy fallbacks: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM_NAME
+ */
+
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
-const createTransporter = () =>
-  nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT, 10),
-    secure: parseInt(process.env.EMAIL_PORT, 10) === 465,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+// ─────────────────────────────────────────────────────────────────────────────
+// Config & transporter (singleton)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function resolveMailConfig() {
+  const host =
+    process.env.EMAIL_HOST || process.env.SMTP_HOST || '';
+  const portRaw =
+    process.env.EMAIL_PORT || process.env.SMTP_PORT || '587';
+  const port = parseInt(portRaw, 10);
+  const safePort = Number.isFinite(port) && port > 0 ? port : 587;
+
+  const user =
+    process.env.EMAIL_USER || process.env.SMTP_USER || '';
+  const pass =
+    process.env.EMAIL_PASS || process.env.SMTP_PASS || '';
+
+  const fromAddress =
+    process.env.EMAIL_FROM ||
+    process.env.SMTP_USER ||
+    user ||
+    '';
+
+  const fromName =
+    process.env.EMAIL_FROM_NAME ||
+    process.env.MAIL_FROM_NAME ||
+    'SOAI Platform';
+
+  return {
+    host: host.trim(),
+    port: safePort,
+    user: user.trim(),
+    pass,
+    fromAddress: fromAddress.trim(),
+    fromName: fromName.trim(),
+  };
+}
+
+function isEmailConfigured() {
+  const c = resolveMailConfig();
+  return Boolean(c.host && c.user && c.pass && c.fromAddress);
+}
+
+let _transporter = null;
+
+function getTransporter() {
+  if (_transporter) return _transporter;
+
+  const c = resolveMailConfig();
+  if (!c.host || !c.user || !c.pass) {
+    return null;
+  }
+
+  const secure = c.port === 465;
+
+  _transporter = nodemailer.createTransport({
+    host: c.host,
+    port: c.port,
+    secure,
+    auth: { user: c.user, pass: c.pass },
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    // STARTTLS on 587 is default for most providers
+    requireTLS: c.port === 587,
   });
 
-const sendEmail = async (to, subject, html) => {
+  return _transporter;
+}
+
+function getFromHeader() {
+  const c = resolveMailConfig();
+  return `"${c.fromName}" <${c.fromAddress}>`;
+}
+
+/**
+ * Low-level send. Throws if SMTP is not configured or send fails.
+ */
+const sendEmail = async (to, subject, html, text) => {
+  const transport = getTransporter();
+  if (!transport) {
+    const err = new Error('Email (SMTP) is not configured');
+    err.code = 'EMAIL_NOT_CONFIGURED';
+    throw err;
+  }
+
   try {
-    const transporter = createTransporter();
-    const info = await transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_FROM}>`,
+    const info = await transport.sendMail({
+      from: getFromHeader(),
       to,
       subject,
       html,
+      ...(text ? { text } : {}),
     });
-    logger.info(`Email sent to ${to}: ${info.messageId}`);
+    logger.info(`[email] Sent to ${to}: ${info.messageId}`);
     return info;
   } catch (error) {
-    logger.error(`Failed to send email to ${to}: ${error.message}`);
+    logger.error(`[email] Failed to send to ${to}: ${error.message}`);
     throw error;
   }
 };
+
+/**
+ * Fire-and-forget friendly: logs and does not throw.
+ */
+const sendEmailQuiet = async (to, subject, html) => {
+  try {
+    await sendEmail(to, subject, html);
+  } catch (err) {
+    if (err.code === 'EMAIL_NOT_CONFIGURED') {
+      logger.warn('[email] SMTP not configured – message skipped.');
+    } else {
+      logger.error(`[email] Send failed (quiet) to ${to}: ${err.message}`);
+    }
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTML layout
+// ─────────────────────────────────────────────────────────────────────────────
 
 const baseTemplate = (content) => `
 <!DOCTYPE html>
@@ -38,20 +146,17 @@ const baseTemplate = (content) => `
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;min-height:100vh;">
     <tr><td align="center" style="padding:40px 16px;">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-        <!-- Header -->
         <tr>
           <td style="background:linear-gradient(135deg,#6c63ff,#4f46e5);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
             <h1 style="margin:0;color:#fff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">SOAI Platform</h1>
             <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">Society Management System</p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="background:#1a1d27;padding:40px;border-left:1px solid #2a2d3a;border-right:1px solid #2a2d3a;">
             ${content}
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="background:#12141e;border-radius:0 0 16px 16px;border:1px solid #2a2d3a;border-top:none;padding:24px 40px;text-align:center;">
             <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} SOAI Platform. All rights reserved.</p>
@@ -71,6 +176,10 @@ const credentialBox = (label, value) => `
       <span style="color:#e5e7eb;font-size:13px;margin-left:8px;font-weight:600;">${value}</span>
     </td>
   </tr>`;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Typed sends
+// ─────────────────────────────────────────────────────────────────────────────
 
 const sendWelcomeEmail = async (adminUser, password) => {
   const html = baseTemplate(`
@@ -96,6 +205,48 @@ const sendWelcomeEmail = async (adminUser, password) => {
   return sendEmail(adminUser.email, 'Welcome to SOAI Platform – Your Admin Credentials', html);
 };
 
+/**
+ * When a super admin creates a new society — welcome e-mail with login link.
+ */
+const sendNewSocietyAdminWelcome = async ({
+  name,
+  email,
+  password,
+  societyName,
+}) => {
+  const appUrl =
+    process.env.FRONTEND_URL ||
+    process.env.APP_URL ||
+    'https://app.soai.in';
+  const loginUrl = `${appUrl.replace(/\/$/, '')}/login`;
+
+  const html = baseTemplate(`
+    <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Welcome to ${societyName}!</h2>
+    <p style="color:#9ca3af;margin:0 0 24px;font-size:15px;line-height:1.6;">
+      Hi <strong style="color:#e5e7eb;">${name}</strong>, your society is registered on <strong style="color:#6c63ff;">SOAI</strong>.
+      Use the credentials below to sign in for the first time.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0"
+      style="background:#12141e;border:1px solid #2a2d3a;border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      ${credentialBox('Email', email)}
+      ${credentialBox('Temporary password', password)}
+    </table>
+    <p style="color:#f87171;font-size:13px;margin:0 0 20px;">
+      Please change your password immediately after your first login.
+    </p>
+    <div style="text-align:center;">
+      <a href="${loginUrl}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
+        Log in to SOAI
+      </a>
+    </div>`);
+
+  return sendEmailQuiet(
+    email,
+    `Welcome to ${societyName} – Your admin credentials`,
+    html,
+  );
+};
+
 const sendUserWelcomeEmail = async (user, password, societyName) => {
   const html = baseTemplate(`
     <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Welcome to ${societyName}! 🏡</h2>
@@ -114,6 +265,29 @@ const sendUserWelcomeEmail = async (user, password, societyName) => {
       You can now access announcements, community feeds, raise complaints, and chat with your neighbours.
     </p>`);
   return sendEmail(user.email, `Welcome to ${societyName} – SOAI Platform`, html);
+};
+
+/**
+ * Resident welcome (create user / bulk) — never throws; skips if SMTP missing.
+ */
+const sendResidentWelcomeEmail = async (
+  { name, email, flatNumber },
+  password,
+  societyName = 'your society',
+) => {
+  if (!isEmailConfigured()) {
+    logger.warn('[email] SMTP not configured – skipping resident welcome email');
+    return;
+  }
+  try {
+    await sendUserWelcomeEmail(
+      { name, email, flatNumber },
+      password,
+      societyName,
+    );
+  } catch (err) {
+    logger.error(`[email] Resident welcome failed for ${email}: ${err.message}`);
+  }
 };
 
 const sendPasswordResetEmail = async (user, resetToken) => {
@@ -184,12 +358,59 @@ const sendComplaintUpdateEmail = async (userEmail, complaint) => {
   return sendEmail(userEmail, `Complaint Update: ${complaint.title}`, html);
 };
 
+/**
+ * Complaint status change (resident notification) — same behaviour as legacy controller helper.
+ */
+const sendComplaintStatusChangeEmail = async ({
+  email,
+  name,
+  complaintTitle,
+  newStatus,
+  adminComment,
+}) => {
+  if (!email) return;
+  if (!isEmailConfigured()) {
+    logger.warn('[email] SMTP not configured – skipping complaint status email');
+    return;
+  }
+
+  const statusLabel = newStatus.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const commentBlock = adminComment
+    ? `<p><strong>Admin note:</strong> ${adminComment}</p>`
+    : '';
+
+  const html = `
+    <p>Hi ${name},</p>
+    <p>Your complaint <strong>"${complaintTitle}"</strong> has been updated.</p>
+    <p><strong>New Status:</strong> ${statusLabel}</p>
+    ${commentBlock}
+    <p>You can log in to your society portal for more details.</p>
+    <br/>
+    <p>Regards,<br/>${resolveMailConfig().fromName} Team</p>
+  `;
+
+  try {
+    await sendEmail(
+      email,
+      `Your complaint "${complaintTitle}" has been updated`,
+      html,
+    );
+  } catch (err) {
+    logger.warn(`[email] Complaint status email failed: ${err.message}`);
+  }
+};
+
 module.exports = {
   sendEmail,
+  sendEmailQuiet,
+  isEmailConfigured,
   sendWelcomeEmail,
+  sendNewSocietyAdminWelcome,
   sendUserWelcomeEmail,
+  sendResidentWelcomeEmail,
   sendPasswordResetEmail,
   sendSubscriptionExpiryWarning,
   sendSubscriptionExpiredEmail,
   sendComplaintUpdateEmail,
+  sendComplaintStatusChangeEmail,
 };

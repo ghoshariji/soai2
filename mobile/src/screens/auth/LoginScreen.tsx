@@ -9,8 +9,8 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Radius } from '@/theme';
@@ -18,19 +18,14 @@ import { loginThunk } from '../../store/slices/authSlice';
 import { useAppDispatch, useAppSelector } from '../../store/index';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import type { AuthStackParamList } from '@/navigation/AuthNavigator';
+import { useResponsive } from '@/utils/layout';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type RootStackParamList = {
-  Login: undefined;
-  Splash: undefined;
-};
-
-type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
-
-const { height } = Dimensions.get('window');
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -53,9 +48,10 @@ function validatePassword(password: string): string | undefined {
 // Component
 // ---------------------------------------------------------------------------
 
-const LoginScreen: React.FC<Props> = () => {
+const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const dispatch = useAppDispatch();
   const { isLoading, error } = useAppSelector((state) => state.auth);
+  const r = useResponsive();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -105,32 +101,51 @@ const LoginScreen: React.FC<Props> = () => {
     setTouched({ email: true, password: true });
     if (eErr || pErr) return;
 
-    dispatch(loginThunk({ email: email.trim().toLowerCase(), password }));
+    dispatch(
+      loginThunk({
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+      }),
+    );
     // Navigation is handled automatically by AppNavigator reacting to
     // isAuthenticated in Redux auth state — no manual navigation needed here.
   }, [dispatch, email, password]);
 
   const handleForgotPassword = useCallback(() => {
-    // Placeholder — future screen implementation
-  }, []);
+    navigation.navigate('ForgotPassword');
+  }, [navigation]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
-
-      {/* Background decorative orbs */}
-      <View style={styles.bgOrb1} />
-      <View style={styles.bgOrb2} />
-
-      <ScrollView
+    <SafeAreaView style={styles.flex} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
         style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
+        <StatusBar barStyle="light-content" backgroundColor={Colors.bg} />
+
+        <View style={styles.bgOrb1} />
+        <View style={styles.bgOrb2} />
+
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingHorizontal: r.gutter,
+              paddingTop: Math.min(Math.max(Spacing.xl, r.height * 0.05), 72),
+              paddingBottom: Spacing.xxl,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+        <View
+          style={{
+            width: '100%',
+            maxWidth: Math.min(440, r.width - r.gutter * 2),
+            alignSelf: 'center',
+          }}
+        >
         {/* ── Header / Branding ── */}
         <Animated.View
           style={[
@@ -150,7 +165,8 @@ const LoginScreen: React.FC<Props> = () => {
             <Text style={styles.titleBrand}>SOAI</Text>
           </View>
           <Text style={styles.subtitle}>
-            Sign in to your account to continue
+            Sign in with your role-assigned account (Super Admin, Society Admin,
+            or Resident). Your role is detected after login.
           </Text>
         </Animated.View>
 
@@ -184,6 +200,7 @@ const LoginScreen: React.FC<Props> = () => {
 
           {/* Email field */}
           <Input
+            layout="constrained"
             label="Email Address"
             placeholder="you@example.com"
             value={email}
@@ -200,6 +217,7 @@ const LoginScreen: React.FC<Props> = () => {
 
           {/* Password field */}
           <Input
+            layout="constrained"
             label="Password"
             placeholder="Enter your password"
             value={password}
@@ -225,7 +243,7 @@ const LoginScreen: React.FC<Props> = () => {
 
           {/* Submit */}
           <Button
-            title={isLoading ? 'Signing in…' : 'Sign In'}
+            title="Sign In"
             onPress={handleLogin}
             loading={isLoading}
             disabled={isLoading}
@@ -260,8 +278,10 @@ const LoginScreen: React.FC<Props> = () => {
           </Text>
           <Text style={styles.footerVersion}>v1.0.0</Text>
         </Animated.View>
+        </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
@@ -276,9 +296,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: height * 0.1,
-    paddingBottom: Spacing.xxl,
+    justifyContent: 'center',
   },
 
   // Background orbs
@@ -289,7 +307,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: 'rgba(108, 99, 255, 0.08)',
+    backgroundColor: 'rgba(79, 70, 229, 0.09)',
   },
   bgOrb2: {
     position: 'absolute',
@@ -304,7 +322,7 @@ const styles = StyleSheet.create({
   // Header / branding
   headerSection: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   logoMark: {
     width: 76,
@@ -364,8 +382,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.border,
-    padding: Spacing.lg,
-    marginBottom: Spacing.xl,
+    padding: Spacing.xl,
+    marginBottom: Spacing.lg,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,

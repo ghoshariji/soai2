@@ -23,9 +23,11 @@
  */
 
 const jwt    = require('jsonwebtoken');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User   = require('../models/User');
 const logger = require('../utils/logger');
+const { sendPasswordResetEmail } = require('../services/email.service');
 const {
   asyncHandler,
   APIError,
@@ -33,6 +35,8 @@ const {
 } = require('../utils/helpers');
 const {
   loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   validate,
 } = require('../utils/validators');
 
@@ -159,7 +163,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   // ── 4. Verify password ──────────────────────────────────────────────────────
-  const isMatch = await bcrypt.compare(password, user.password);
+  const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw APIError.unauthorized('Invalid email or password.');
   }
@@ -429,6 +433,84 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// forgotPassword
+// POST /api/auth/forgot-password
+// Body: { email }
+// ─────────────────────────────────────────────────────────────────────────────
+
+const hashResetToken = (plain) =>
+  crypto.createHash('sha256').update(plain, 'utf8').digest('hex');
+
+/**
+ * Issue a one-time password reset token (e-mailed in plain form; only a hash is stored).
+ * Always responds with the same message to avoid account enumeration.
+ */
+const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = validate(forgotPasswordSchema, req.body);
+
+  const user = await User.findOne({
+    email,
+    isDeleted: false,
+  }).select('+passwordResetToken +passwordResetExpires');
+
+  if (user && user.status !== 'blocked') {
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    user.passwordResetToken   = hashResetToken(plainToken);
+    user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save({ validateBeforeSave: false });
+
+    try {
+      await sendPasswordResetEmail(user, plainToken);
+    } catch (err) {
+      logger.error(`[auth] Password reset email failed for ${email}: ${err.message}`);
+    }
+  }
+
+  return ApiResponse.ok(
+    'If an account exists for that email, you will receive password reset instructions shortly.'
+  ).send(res);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resetPassword
+// POST /api/auth/reset-password
+// Body: { token, newPassword, confirmNewPassword }
+// ─────────────────────────────────────────────────────────────────────────────
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const { token, newPassword } = validate(resetPasswordSchema, req.body);
+
+  const hashed = hashResetToken(token);
+  const user   = await User.findOne({
+    passwordResetToken:   hashed,
+    passwordResetExpires: { $gt: new Date() },
+    isDeleted:            false,
+  }).select('+passwordResetToken +passwordResetExpires +password +refreshToken');
+
+  if (!user) {
+    throw APIError.badRequest(
+      'This reset link is invalid or has expired. Please request a new one.'
+    );
+  }
+
+  if (user.status === 'blocked') {
+    throw APIError.forbidden('Your account has been blocked. Please contact support.');
+  }
+
+  user.password             = newPassword;
+  user.passwordResetToken   = undefined;
+  user.passwordResetExpires = undefined;
+  user.refreshToken         = undefined;
+  await user.save();
+
+  logger.info(`[auth] User ${user._id} reset password via e-mail token.`);
+
+  return ApiResponse.ok(
+    'Password reset successful. You can now sign in with your new password.'
+  ).send(res);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Exports
 // ─────────────────────────────────────────────────────────────────────────────
 module.exports = {
@@ -437,4 +519,6 @@ module.exports = {
   logout,
   getMe,
   changePassword,
+  forgotPassword,
+  resetPassword,
 };

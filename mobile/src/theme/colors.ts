@@ -1,8 +1,10 @@
 export const Colors = {
-  // Brand
-  primary: '#6C63FF',
-  primaryDark: '#4F46E5',
-  primaryLight: '#A5B4FC',
+  // Brand (SaaS-style indigo)
+  primary: '#4F46E5',
+  primaryDark: '#4338CA',
+  primaryLight: '#818CF8',
+  /** Accent / positive actions */
+  secondary: '#22C55E',
 
   // Dark theme backgrounds
   bg: '#0F1117',
@@ -38,9 +40,9 @@ export const Colors = {
 } as const;
 
 export const LightColors = {
-  bg: '#F3F4F6',
+  bg: '#F9FAFB',
   bgCard: '#FFFFFF',
-  bgInput: '#F9FAFB',
+  bgInput: '#F3F4F6',
   border: '#E5E7EB',
   textPrimary: '#111827',
   textSecondary: '#6B7280',

@@ -3,11 +3,13 @@
 /**
  * auth.routes.js
  *
- * POST   /api/auth/login            → login            (authLimiter)
- * POST   /api/auth/refresh-token    → refreshToken
- * POST   /api/auth/logout           → logout           (authenticate)
- * GET    /api/auth/me               → getMe            (authenticate)
- * PUT    /api/auth/change-password  → changePassword   (authenticate)
+ * POST   /api/auth/login             → login            (authLimiter)
+ * POST   /api/auth/forgot-password   → forgotPassword   (authLimiter)
+ * POST   /api/auth/reset-password    → resetPassword    (authLimiter)
+ * POST   /api/auth/refresh-token     → refreshToken
+ * POST   /api/auth/logout            → logout           (authenticate)
+ * GET    /api/auth/me                → getMe            (authenticate)
+ * PUT    /api/auth/change-password   → changePassword   (authenticate)
  */
 
 const express = require('express');
@@ -18,6 +20,8 @@ const {
   logout,
   getMe,
   changePassword,
+  forgotPassword,
+  resetPassword,
 } = require('../controllers/auth.controller');
 
 const { authenticate }  = require('../middleware/auth');
@@ -27,6 +31,12 @@ const router = express.Router();
 
 // POST /api/auth/login
 router.post('/login', authLimiter, login);
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', authLimiter, forgotPassword);
+
+// POST /api/auth/reset-password
+router.post('/reset-password', authLimiter, resetPassword);
 
 // POST /api/auth/refresh-token
 router.post('/refresh-token', refreshToken);

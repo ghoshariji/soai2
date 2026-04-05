@@ -17,6 +17,9 @@ export interface Message {
   type: MessageType;
   /** ID of the sender user. */
   senderId: string;
+  /** From populated senderId (group chat display). */
+  senderDisplayName?: string | null;
+  senderProfilePhoto?: string | null;
   /** Set for personal (1-to-1) messages. */
   receiverId: string | null;
   /** Set for group messages. */
@@ -67,13 +70,41 @@ export interface ChatState {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function idFromRef(ref: unknown): string {
+  if (ref && typeof ref === 'object' && ref !== null && '_id' in ref) {
+    return String((ref as { _id: unknown })._id);
+  }
+  return String(ref ?? '');
+}
+
+/** Name/photo when API/socket sends populated `senderId`. */
+function senderDisplayFromRaw(raw: Record<string, unknown>): {
+  senderDisplayName?: string;
+  senderProfilePhoto?: string | null;
+} {
+  const s = raw.senderId;
+  if (s && typeof s === 'object' && s !== null) {
+    const o = s as Record<string, unknown>;
+    if (typeof o.name === 'string') {
+      return {
+        senderDisplayName: o.name,
+        senderProfilePhoto:
+          typeof o.profilePhoto === 'string' ? o.profilePhoto : null,
+      };
+    }
+  }
+  return {};
+}
+
 function normaliseMessage(raw: Record<string, unknown>): Message {
+  const senderMeta = senderDisplayFromRaw(raw);
   return {
     _id: (raw._id ?? raw.id ?? '') as string,
     type: (raw.type ?? 'text') as MessageType,
-    senderId: (raw.senderId ?? raw.sender ?? '') as string,
-    receiverId: (raw.receiverId ?? raw.receiver ?? null) as string | null,
-    groupId: (raw.groupId ?? raw.group ?? null) as string | null,
+    senderId: idFromRef(raw.senderId),
+    ...senderMeta,
+    receiverId: raw.receiverId != null ? idFromRef(raw.receiverId) : null,
+    groupId: raw.groupId != null ? idFromRef(raw.groupId) : null,
     content: (raw.content ?? raw.text ?? '') as string,
     mediaUrl: (raw.mediaUrl ?? raw.media ?? null) as string | null,
     readBy: Array.isArray(raw.readBy)
@@ -84,6 +115,24 @@ function normaliseMessage(raw: Record<string, unknown>): Message {
 }
 
 function normaliseConversation(raw: Record<string, unknown>): Conversation {
+  // GET /chat/conversations aggregation shape
+  if (raw.partnerId && raw.partner && typeof raw.partner === 'object') {
+    const p = raw.partner as Record<string, unknown>;
+    const pid = String(raw.partnerId);
+    return {
+      id: pid,
+      userId: pid,
+      groupId: null,
+      name: String(p.name ?? 'User'),
+      profilePhoto: (p.profilePhoto as string) ?? null,
+      lastMessage: String(raw.lastContent ?? ''),
+      lastMessageAt: String(raw.lastCreatedAt ?? ''),
+      unreadCount: Number(raw.unreadCount ?? 0),
+      isGroup: false,
+      isOnline: Boolean(p.isOnline ?? false),
+    };
+  }
+
   const isGroup = Boolean(raw.isGroup ?? raw.groupId);
   const id = (
     isGroup
@@ -176,14 +225,19 @@ export const fetchPersonalMessages = createAsyncThunk<
   'chat/fetchPersonalMessages',
   async ({ userId, page = 1, limit = 30 }, { rejectWithValue }) => {
     try {
-      const { data } = await chatService.getPersonalMessages(userId, {
+      const res = await chatService.getPersonalMessages(userId, {
         page,
         limit,
       });
-      const messages = (data.data as Record<string, unknown>[]).map(
-        normaliseMessage,
-      );
-      return { roomId: userId, messages, page, totalPages: data.totalPages ?? 1 };
+      const root = res.data as unknown as {
+        data?: { messages?: Record<string, unknown>[] };
+        meta?: { totalPages?: number };
+      };
+      const rawList = root.data?.messages ?? [];
+      const messages = rawList.map((m) => normaliseMessage(m));
+      const roomId = `personal_${userId}`;
+      const totalPages = root.meta?.totalPages ?? 1;
+      return { roomId, messages, page, totalPages };
     } catch (error) {
       return rejectWithValue(extractErrorMessage(error));
     }
@@ -202,14 +256,19 @@ export const fetchGroupMessages = createAsyncThunk<
   'chat/fetchGroupMessages',
   async ({ groupId, page = 1, limit = 30 }, { rejectWithValue }) => {
     try {
-      const { data } = await chatService.getGroupMessages(groupId, {
+      const res = await chatService.getGroupMessages(groupId, {
         page,
         limit,
       });
-      const messages = (data.data as Record<string, unknown>[]).map(
-        normaliseMessage,
-      );
-      return { roomId: groupId, messages, page, totalPages: data.totalPages ?? 1 };
+      const root = res.data as unknown as {
+        data?: { messages?: Record<string, unknown>[] };
+        meta?: { totalPages?: number };
+      };
+      const rawList = root.data?.messages ?? [];
+      const messages = rawList.map((m) => normaliseMessage(m));
+      const roomId = `group_${groupId}`;
+      const totalPages = root.meta?.totalPages ?? 1;
+      return { roomId, messages, page, totalPages };
     } catch (error) {
       return rejectWithValue(extractErrorMessage(error));
     }
@@ -233,17 +292,22 @@ const chatSlice = createSlice({
       action: PayloadAction<Message | Record<string, unknown>>,
     ) {
       const raw = action.payload as Record<string, unknown>;
-      const message: Message =
-        typeof raw._id === 'string' && typeof raw.senderId === 'string'
+      const message: Message = {
+        ...(typeof raw._id === 'string' && typeof raw.senderId === 'string'
           ? (raw as unknown as Message)
-          : normaliseMessage(raw);
+          : normaliseMessage(raw)),
+        ...senderDisplayFromRaw(raw),
+      };
 
+      // UI keys rooms as `group_${groupId}` / `personal_${peerId}` (see fetch thunks).
+      // Prefer explicit roomId from socket/REST handlers; never use bare groupId alone
+      // or new messages land under the wrong key and do not show in the open chat.
+      const explicitRoom = raw.roomId as string | undefined;
       const roomId =
-        message.groupId ??
-        // For personal messages we key by the OTHER party's id.
-        // The consumer is responsible for passing the correct roomId
-        // via the data field when dispatching from a socket handler.
-        (raw.roomId as string | undefined) ??
+        explicitRoom ??
+        (message.groupId != null && String(message.groupId) !== ''
+          ? `group_${message.groupId}`
+          : null) ??
         message.receiverId ??
         message.senderId;
 

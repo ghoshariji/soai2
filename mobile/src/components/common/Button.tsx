@@ -1,18 +1,22 @@
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
-  TouchableOpacity,
+  Pressable,
   Text,
   ActivityIndicator,
   StyleSheet,
   ViewStyle,
   TextStyle,
   View,
+  Platform,
 } from 'react-native';
-import { Colors } from '@/theme';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import { Colors, Spacing } from '@/theme';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
 type Size = 'sm' | 'md' | 'lg';
@@ -29,23 +33,16 @@ interface ButtonProps {
   style?: ViewStyle;
 }
 
-// ---------------------------------------------------------------------------
-// Size maps
-// ---------------------------------------------------------------------------
-
-const HEIGHT: Record<Size, number> = { sm: 36, md: 48, lg: 56 };
-const PADDING_H: Record<Size, number> = { sm: 12, md: 20, lg: 28 };
+const HEIGHT: Record<Size, number> = { sm: 40, md: 50, lg: 52 };
+const PADDING_H: Record<Size, number> = { sm: Spacing.md, md: Spacing.lg, lg: Spacing.xl };
 const FONT_SIZE: Record<Size, number> = { sm: 13, md: 15, lg: 16 };
-const RADIUS: Record<Size, number> = { sm: 8, md: 12, lg: 14 };
-
-// ---------------------------------------------------------------------------
-// Variant styles
-// ---------------------------------------------------------------------------
+const RADIUS = 12;
 
 function getVariantStyles(variant: Variant): {
   container: ViewStyle;
   text: TextStyle;
   indicatorColor: string;
+  shadow?: ViewStyle;
 } {
   switch (variant) {
     case 'primary':
@@ -53,10 +50,24 @@ function getVariantStyles(variant: Variant): {
         container: { backgroundColor: Colors.primary },
         text: { color: Colors.white },
         indicatorColor: Colors.white,
+        shadow: Platform.select({
+          ios: {
+            shadowColor: Colors.primary,
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.35,
+            shadowRadius: 10,
+          },
+          android: { elevation: 4 },
+          default: {},
+        }) as ViewStyle,
       };
     case 'secondary':
       return {
-        container: { backgroundColor: Colors.bgCard, borderWidth: 1, borderColor: Colors.border },
+        container: {
+          backgroundColor: Colors.bgCard,
+          borderWidth: 1,
+          borderColor: Colors.border,
+        },
         text: { color: Colors.textPrimary },
         indicatorColor: Colors.textPrimary,
       };
@@ -85,9 +96,7 @@ function getVariantStyles(variant: Variant): {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const spring = { damping: 18, stiffness: 260 };
 
 const Button: React.FC<ButtonProps> = ({
   title,
@@ -102,49 +111,74 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   const variantStyles = getVariantStyles(variant);
   const isDisabled = disabled || loading;
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const onPressIn = useCallback(() => {
+    if (!isDisabled) {
+      scale.value = withSpring(0.96, spring);
+    }
+  }, [isDisabled, scale]);
+
+  const onPressOut = useCallback(() => {
+    scale.value = withSpring(1, spring);
+  }, [scale]);
+
+  useEffect(() => {
+    if (isDisabled) {
+      scale.value = 1;
+    }
+  }, [isDisabled, scale]);
 
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
       disabled={isDisabled}
-      activeOpacity={0.75}
-      style={[
-        styles.base,
-        {
-          height: HEIGHT[size],
-          paddingHorizontal: PADDING_H[size],
-          borderRadius: RADIUS[size],
-        },
-        variantStyles.container,
-        isDisabled && styles.disabled,
-        style,
-      ]}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: isDisabled }}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={variantStyles.indicatorColor} />
-      ) : (
-        <View style={styles.inner}>
-          {leftIcon && <View style={styles.iconLeft}>{leftIcon}</View>}
-          <Text
-            style={[
-              styles.label,
-              { fontSize: FONT_SIZE[size] },
-              variantStyles.text,
-            ]}
-            numberOfLines={1}
-          >
-            {title}
-          </Text>
-          {rightIcon && <View style={styles.iconRight}>{rightIcon}</View>}
-        </View>
-      )}
-    </TouchableOpacity>
+      <AnimatedView
+        style={[
+          styles.base,
+          {
+            height: HEIGHT[size],
+            paddingHorizontal: PADDING_H[size],
+            borderRadius: RADIUS,
+          },
+          variantStyles.container,
+          variant === 'primary' && variantStyles.shadow,
+          isDisabled && styles.disabled,
+          animatedStyle,
+          style,
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator size="small" color={variantStyles.indicatorColor} />
+        ) : (
+          <View style={styles.inner}>
+            {leftIcon ? <View style={styles.iconLeft}>{leftIcon}</View> : null}
+            <Text
+              style={[
+                styles.label,
+                { fontSize: FONT_SIZE[size] },
+                variantStyles.text,
+              ]}
+              numberOfLines={1}
+            >
+              {title}
+            </Text>
+            {rightIcon ? <View style={styles.iconRight}>{rightIcon}</View> : null}
+          </View>
+        )}
+      </AnimatedView>
+    </Pressable>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
   base: {
@@ -152,6 +186,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   inner: {
     flexDirection: 'row',
@@ -163,14 +198,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   iconLeft: {
-    marginRight: 8,
+    marginRight: Spacing.sm,
   },
   iconRight: {
-    marginLeft: 8,
+    marginLeft: Spacing.sm,
   },
   disabled: {
-    opacity: 0.5,
+    opacity: 0.48,
   },
 });
 
-export default Button;
+export default React.memo(Button);

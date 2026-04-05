@@ -18,8 +18,7 @@
  *   - 'super_admin'  : inherits all society_admin privileges.
  */
 
-const mongoose    = require('mongoose');
-const nodemailer  = require('nodemailer');
+const mongoose = require('mongoose');
 
 const Complaint    = require('../models/Complaint');
 const Notification = require('../models/Notification');
@@ -33,25 +32,7 @@ const {
   paginate,
   paginateMeta,
 } = require('../utils/helpers');
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mail transport (nodemailer) – fails gracefully when SMTP is not configured
-// ─────────────────────────────────────────────────────────────────────────────
-const createMailTransport = () => {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    logger.warn('[complaint] SMTP credentials not configured – complaint emails will be skipped.');
-    return null;
-  }
-  return nodemailer.createTransport({
-    host:   SMTP_HOST,
-    port:   parseInt(SMTP_PORT, 10) || 587,
-    secure: parseInt(SMTP_PORT, 10) === 465,
-    auth:   { user: SMTP_USER, pass: SMTP_PASS },
-  });
-};
-
-const mailer = createMailTransport();
+const { sendComplaintStatusChangeEmail } = require('../services/email.service');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Private helpers
@@ -136,46 +117,6 @@ const notifyAdmins = async ({ societyId, raisedBy, complaintId, title }) => {
   }
 };
 
-/**
- * Send a status-update e-mail to the resident who raised the complaint.
- * Non-blocking – fails silently when SMTP is unavailable.
- *
- * @param {object} opts
- * @param {string} opts.email
- * @param {string} opts.name
- * @param {string} opts.complaintTitle
- * @param {string} opts.newStatus
- * @param {string} [opts.adminComment]
- */
-const sendStatusEmail = async ({ email, name, complaintTitle, newStatus, adminComment }) => {
-  if (!mailer || !email) return;
-  try {
-    const fromName    = process.env.MAIL_FROM_NAME || 'SoAI';
-    const statusLabel = newStatus.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-    const commentBlock = adminComment
-      ? `<p><strong>Admin note:</strong> ${adminComment}</p>`
-      : '';
-
-    await mailer.sendMail({
-      from:    `"${fromName}" <${process.env.SMTP_USER}>`,
-      to:      email,
-      subject: `Your complaint "${complaintTitle}" has been updated`,
-      html: `
-        <p>Hi ${name},</p>
-        <p>Your complaint <strong>"${complaintTitle}"</strong> has been updated.</p>
-        <p><strong>New Status:</strong> ${statusLabel}</p>
-        ${commentBlock}
-        <p>You can log in to your society portal for more details.</p>
-        <br/>
-        <p>Regards,<br/>${fromName} Team</p>
-      `,
-    });
-  } catch (err) {
-    logger.warn('[complaint] Status email failed:', err.message);
-  }
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // createComplaint
 // POST /complaints
@@ -215,11 +156,11 @@ const createComplaint = asyncHandler(async (req, res) => {
     throw APIError.badRequest(`Invalid priority. Must be one of: ${VALID_PRIORITIES.join(', ')}.`);
   }
 
-  const images = buildImageArray(req.files);
+  const images = buildImageArray(Array.isArray(req.files) ? req.files : []);
 
   const complaint = await Complaint.create({
-    societyId,
-    raisedBy,
+    societyId: new mongoose.Types.ObjectId(societyId),
+    raisedBy:  new mongoose.Types.ObjectId(raisedBy),
     title:       String(title).trim(),
     description: String(description).trim(),
     images,
@@ -239,7 +180,8 @@ const createComplaint = asyncHandler(async (req, res) => {
     `[complaint] User ${raisedBy} raised complaint ${complaint._id} in society ${societyId}.`
   );
 
-  return ApiResponse.created('Complaint submitted successfully.', complaint).send(res);
+  const payload = complaint.toObject ? complaint.toObject() : complaint;
+  return ApiResponse.created('Complaint submitted successfully.', payload).send(res);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -427,7 +369,7 @@ const updateComplaintStatus = asyncHandler(async (req, res) => {
 
     // Status e-mail
     if (raisedByUser) {
-      sendStatusEmail({
+      sendComplaintStatusChangeEmail({
         email:          raisedByUser.email,
         name:           raisedByUser.name,
         complaintTitle: complaint.title,

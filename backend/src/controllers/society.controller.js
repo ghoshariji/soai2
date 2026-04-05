@@ -30,7 +30,6 @@
  *     isDeleted=true as well.
  */
 
-const nodemailer   = require('nodemailer');
 const User         = require('../models/User');
 const Society      = require('../models/Society');
 const Subscription = require('../models/Subscription');
@@ -48,121 +47,7 @@ const {
   createSocietySchema,
   validate,
 } = require('../utils/validators');
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Email transport
-// Built once at module load.  Falls back gracefully when SMTP is unconfigured
-// (dev / test environments).
-// ─────────────────────────────────────────────────────────────────────────────
-
-const buildMailer = () => {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    logger.warn(
-      '[society] SMTP credentials not configured – welcome emails will be skipped.'
-    );
-    return null;
-  }
-  return nodemailer.createTransport({
-    host:   SMTP_HOST,
-    port:   parseInt(SMTP_PORT, 10) || 587,
-    secure: parseInt(SMTP_PORT, 10) === 465,
-    auth:   { user: SMTP_USER, pass: SMTP_PASS },
-    pool:   true,
-    maxConnections: 3,
-  });
-};
-
-const mailer = buildMailer();
-
-/**
- * Send a welcome e-mail to a newly created society admin.
- * Fires-and-forgets – a mail failure never blocks the HTTP response.
- *
- * @param {object} opts
- * @param {string} opts.name          Admin's full name
- * @param {string} opts.email         Admin's email address
- * @param {string} opts.password      Plain-text auto-generated password
- * @param {string} opts.societyName   Society name for contextualisation
- */
-const sendWelcomeEmail = async ({ name, email, password, societyName }) => {
-  if (!mailer) return;
-
-  const fromName    = process.env.MAIL_FROM_NAME || 'SoAI Platform';
-  const fromAddress = process.env.SMTP_USER;
-  const appUrl      = process.env.APP_URL || 'https://app.soai.in';
-
-  try {
-    await mailer.sendMail({
-      from:    `"${fromName}" <${fromAddress}>`,
-      to:      email,
-      subject: `Welcome to ${societyName} – Your admin credentials`,
-      html: `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to SoAI</title>
-  <style>
-    body  { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
-    .wrap { max-width: 600px; margin: 30px auto; background: #fff;
-            border-radius: 8px; overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-    .hdr  { background: #1a56db; padding: 24px 32px; color: #fff; }
-    .hdr h1 { margin: 0; font-size: 22px; }
-    .body { padding: 32px; color: #333; line-height: 1.6; }
-    .creds{ background: #f0f4ff; border: 1px solid #c7d7fc;
-            border-radius: 6px; padding: 16px 20px; margin: 20px 0; }
-    .creds p { margin: 6px 0; font-size: 15px; }
-    .creds strong { color: #1a56db; }
-    .btn  { display: inline-block; margin-top: 20px; padding: 12px 28px;
-            background: #1a56db; color: #fff; border-radius: 6px;
-            text-decoration: none; font-weight: bold; }
-    .ftr  { padding: 16px 32px; background: #f9fafb;
-            color: #777; font-size: 12px; border-top: 1px solid #eee; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="hdr">
-      <h1>Welcome to ${societyName}!</h1>
-    </div>
-    <div class="body">
-      <p>Hi <strong>${name}</strong>,</p>
-      <p>
-        Your society has been successfully registered on the <strong>SoAI</strong>
-        platform. Your administrator account is ready – use the credentials below
-        to sign in for the first time.
-      </p>
-      <div class="creds">
-        <p><strong>Email:</strong> ${email}</p>
-        <p><strong>Temporary password:</strong> <strong>${password}</strong></p>
-      </div>
-      <p style="color:#c0392b; font-size:13px;">
-        ⚠️ Please change your password immediately after your first login.
-      </p>
-      <a class="btn" href="${appUrl}/login">Login to SoAI</a>
-      <p style="margin-top:28px; font-size:13px; color:#555;">
-        If you did not expect this email, please ignore it or contact
-        <a href="mailto:support@soai.in">support@soai.in</a>.
-      </p>
-    </div>
-    <div class="ftr">
-      &copy; ${new Date().getFullYear()} SoAI Platform. All rights reserved.
-    </div>
-  </div>
-</body>
-</html>
-      `.trim(),
-    });
-
-    logger.info(`[society] Welcome email sent to ${email}.`);
-  } catch (mailErr) {
-    // Non-fatal: log and continue
-    logger.error(`[society] Failed to send welcome email to ${email}:`, mailErr);
-  }
-};
+const { sendNewSocietyAdminWelcome } = require('../services/email.service');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subscription feature factory
@@ -348,8 +233,8 @@ const createSociety = asyncHandler(async (req, res) => {
     notes:      notes ? String(notes).trim() : '',
   });
 
-  // ── 9. Send welcome email (non-blocking) ────────────────────────────────────
-  sendWelcomeEmail({
+  // ── 9. Send welcome email (non-blocking, Nodemailer via email.service) ───────
+  sendNewSocietyAdminWelcome({
     name:        adminName.trim(),
     email:       normalizedAdminEmail,
     password:    tempPassword,

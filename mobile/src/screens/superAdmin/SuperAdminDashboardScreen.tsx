@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  FlatList,
   StyleSheet,
   RefreshControl,
   TouchableOpacity,
@@ -11,10 +10,17 @@ import {
   StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { Colors, Spacing, Radius } from '@/theme';
-import { dashboardService } from '../../services/api';
+import {
+  dashboardService,
+  getApiErrorMessage,
+  type ApiResponse,
+} from '../../services/api';
 import { useAppSelector } from '../../store/index';
+import type { SuperAdminTabParamList } from '@/navigation/SuperAdminNavigator';
 import Avatar from '../../components/common/Avatar';
 import Badge from '../../components/common/Badge';
 import Card from '../../components/common/Card';
@@ -54,10 +60,14 @@ interface RecentSociety {
 interface DashboardData {
   totalSocieties: number;
   activeSocieties: number;
+  inactiveSocieties: number;
   totalUsers: number;
+  activeUsers: number;
   activeSubscriptions: number;
+  expiredSubscriptions: number;
   expiringSoon: number;
   monthlyGrowth: BarDataPoint[];
+  userActivity: BarDataPoint[];
   recentSocieties: RecentSociety[];
 }
 
@@ -85,29 +95,60 @@ function formatDate(iso: string): string {
   }
 }
 
+function mapGrowthSeries(
+  series: { label?: string; month?: string; value?: number; count?: number }[] | undefined,
+): BarDataPoint[] {
+  const growth = series ?? [];
+  return growth.map((g) => ({
+    label: (g.label ?? g.month ?? '') as string,
+    value: (g.value ?? g.count ?? 0) as number,
+  }));
+}
+
 function normaliseDashboard(raw: Record<string, unknown>): DashboardData {
-  const societies = (raw.recentSocieties as Record<string, unknown>[] | undefined) ?? [];
-  const growth = (raw.monthlyGrowth as { label?: string; month?: string; value?: number; count?: number }[] | undefined) ?? [];
+  const soc = raw.societies as Record<string, number> | undefined;
+  const usr = raw.users as Record<string, number> | undefined;
+  const sub = raw.subscriptions as Record<string, number> | undefined;
+  const top = (raw.topSocietiesByUsers as Record<string, unknown>[] | undefined) ?? [];
 
   return {
-    totalSocieties: (raw.totalSocieties as number) ?? 0,
-    activeSocieties: (raw.activeSocieties as number) ?? 0,
-    totalUsers: (raw.totalUsers as number) ?? 0,
-    activeSubscriptions: (raw.activeSubscriptions as number) ?? 0,
-    expiringSoon: (raw.expiringSoon as number) ?? 0,
-    monthlyGrowth: growth.map((g) => ({
-      label: (g.label ?? g.month ?? '') as string,
-      value: (g.value ?? g.count ?? 0) as number,
-    })),
-    recentSocieties: societies.slice(0, 5).map((s) => ({
-      _id: (s._id ?? s.id ?? '') as string,
+    totalSocieties: soc?.total ?? (raw.totalSocieties as number) ?? 0,
+    activeSocieties: soc?.active ?? (raw.activeSocieties as number) ?? 0,
+    inactiveSocieties: soc?.inactive ?? 0,
+    totalUsers: usr?.total ?? (raw.totalUsers as number) ?? 0,
+    activeUsers: usr?.active ?? 0,
+    activeSubscriptions: sub?.active ?? (raw.activeSubscriptions as number) ?? 0,
+    expiredSubscriptions: sub?.expired ?? 0,
+    expiringSoon: sub?.expiringSoon ?? (raw.expiringSoon as number) ?? 0,
+    monthlyGrowth: mapGrowthSeries(
+      Array.isArray(raw.monthlyGrowth)
+        ? (raw.monthlyGrowth as {
+            label?: string;
+            month?: string;
+            value?: number;
+            count?: number;
+          }[])
+        : undefined,
+    ),
+    userActivity: mapGrowthSeries(
+      Array.isArray(raw.userActivity)
+        ? (raw.userActivity as {
+            label?: string;
+            month?: string;
+            value?: number;
+            count?: number;
+          }[])
+        : undefined,
+    ),
+    recentSocieties: top.slice(0, 5).map((s) => ({
+      _id: (s.societyId ?? s._id ?? '') as string,
       name: (s.name ?? '') as string,
       city: (s.city ?? '') as string,
-      status: (s.status ?? 'inactive') as 'active' | 'inactive' | 'pending',
-      adminName: (s.adminName ?? (s.admin as Record<string, unknown>)?.name ?? 'N/A') as string,
-      plan: (s.plan ?? s.subscriptionPlan ?? 'basic') as string,
-      createdAt: (s.createdAt ?? '') as string,
-      totalMembers: (s.totalMembers ?? s.memberCount ?? 0) as number,
+      status: (s.status ?? 'active') as 'active' | 'inactive' | 'pending',
+      adminName: '—',
+      plan: 'basic',
+      createdAt: '',
+      totalMembers: (s.userCount ?? 0) as number,
     })),
   };
 }
@@ -125,7 +166,11 @@ const StatCard: React.FC<StatCardProps> = ({ item }) => (
     <View style={[statStyles.iconWrap, { backgroundColor: item.iconBg }]}>
       <Icon name={item.icon} size={20} color={item.iconColor} />
     </View>
-    <Text style={statStyles.value}>{formatNumber(Number(item.value))}</Text>
+    <Text style={statStyles.value} numberOfLines={2}>
+      {typeof item.value === 'string'
+        ? item.value
+        : formatNumber(item.value as number)}
+    </Text>
     <Text style={statStyles.label} numberOfLines={2}>{item.label}</Text>
     {item.delta ? (
       <View style={statStyles.deltaRow}>
@@ -347,7 +392,10 @@ const rowStyles = StyleSheet.create({
 // Main screen component
 // ---------------------------------------------------------------------------
 
+type DashboardTabNav = BottomTabNavigationProp<SuperAdminTabParamList, 'Dashboard'>;
+
 const SuperAdminDashboardScreen: React.FC = () => {
+  const navigation = useNavigation<DashboardTabNav>();
   const { user } = useAppSelector((state) => state.auth);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -361,12 +409,14 @@ const SuperAdminDashboardScreen: React.FC = () => {
       setError(null);
 
       const res = await dashboardService.getSuperAdminStats();
-      const raw = (res.data.data ?? {}) as Record<string, unknown>;
+      const body = res.data as ApiResponse<Record<string, unknown>>;
+      if (body.success === false) {
+        throw new Error(body.message || 'Failed to load dashboard');
+      }
+      const raw = (body.data ?? {}) as Record<string, unknown>;
       setData(normaliseDashboard(raw));
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Failed to load dashboard';
-      setError(msg);
+      setError(getApiErrorMessage(err, 'Failed to load dashboard'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -385,13 +435,11 @@ const SuperAdminDashboardScreen: React.FC = () => {
           icon: 'business-outline',
           iconBg: 'rgba(108,99,255,0.15)',
           iconColor: Colors.primary,
-          delta: '+12%',
-          deltaUp: true,
         },
         {
-          label: 'Active Societies',
-          value: data.activeSocieties,
-          icon: 'checkmark-circle-outline',
+          label: 'Active / Inactive',
+          value: `${data.activeSocieties} / ${data.inactiveSocieties}`,
+          icon: 'git-compare-outline',
           iconBg: 'rgba(16,185,129,0.15)',
           iconColor: Colors.success,
         },
@@ -401,18 +449,30 @@ const SuperAdminDashboardScreen: React.FC = () => {
           icon: 'people-outline',
           iconBg: 'rgba(59,130,246,0.15)',
           iconColor: '#3B82F6',
-          delta: '+8%',
-          deltaUp: true,
         },
         {
-          label: 'Active Subscriptions',
+          label: 'Active Users',
+          value: data.activeUsers,
+          icon: 'person-check-outline',
+          iconBg: 'rgba(34,197,94,0.15)',
+          iconColor: Colors.success,
+        },
+        {
+          label: 'Active Subs',
           value: data.activeSubscriptions,
           icon: 'card-outline',
           iconBg: 'rgba(245,158,11,0.15)',
           iconColor: Colors.warning,
         },
         {
-          label: 'Expiring Soon',
+          label: 'Expired Subs',
+          value: data.expiredSubscriptions,
+          icon: 'close-circle-outline',
+          iconBg: 'rgba(239,68,68,0.12)',
+          iconColor: Colors.error,
+        },
+        {
+          label: 'Expiring (7d)',
           value: data.expiringSoon,
           icon: 'time-outline',
           iconBg: 'rgba(239,68,68,0.15)',
@@ -478,17 +538,41 @@ const SuperAdminDashboardScreen: React.FC = () => {
           ))}
         </View>
 
+        <TouchableOpacity
+          style={styles.ctaCreate}
+          activeOpacity={0.85}
+          onPress={() =>
+            navigation.navigate('Societies', { screen: 'CreateSociety' })
+          }
+        >
+          <Icon name="add-circle-outline" size={22} color={Colors.white} />
+          <Text style={styles.ctaCreateText}>Create Society</Text>
+        </TouchableOpacity>
+
         {/* ── Monthly Growth Chart ── */}
         {data?.monthlyGrowth && data.monthlyGrowth.length > 0 ? (
           <Card style={styles.chartCard}>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Monthly Growth</Text>
+              <Text style={styles.cardTitle}>Monthly growth</Text>
               <View style={styles.chartLegend}>
                 <View style={styles.legendDot} />
-                <Text style={styles.legendText}>New Societies</Text>
+                <Text style={styles.legendText}>New societies</Text>
               </View>
             </View>
             <MiniBarChart data={data.monthlyGrowth} />
+          </Card>
+        ) : null}
+
+        {data?.userActivity && data.userActivity.length > 0 ? (
+          <Card style={styles.chartCard}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>User activity</Text>
+              <View style={styles.chartLegend}>
+                <View style={[styles.legendDot, { backgroundColor: Colors.success }]} />
+                <Text style={styles.legendText}>Active users (by last seen)</Text>
+              </View>
+            </View>
+            <MiniBarChart data={data.userActivity} />
           </Card>
         ) : null}
 
@@ -582,6 +666,22 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: Spacing.md,
+  },
+
+  ctaCreate: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.lg,
+    marginBottom: Spacing.lg,
+  },
+  ctaCreateText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '700',
   },
 
   // Chart card

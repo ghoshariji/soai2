@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-import SocietyAdminDashboardScreen from '@/screens/societyAdmin/SocietyAdminDashboardScreen';
+import SocietyAdminDashboardScreen from '@/screens/societyAdmin/DashboardScreen';
 import UsersScreen from '@/screens/societyAdmin/UsersScreen';
 import CreateUserScreen from '@/screens/societyAdmin/CreateUserScreen';
 import UserDetailScreen from '@/screens/societyAdmin/UserDetailScreen';
@@ -12,7 +12,9 @@ import BulkUploadScreen from '@/screens/societyAdmin/BulkUploadScreen';
 import GroupsScreen from '@/screens/societyAdmin/GroupsScreen';
 import AnnouncementsScreen from '@/screens/societyAdmin/AnnouncementsScreen';
 import ComplaintsScreen from '@/screens/societyAdmin/ComplaintsScreen';
-import ChatListScreen from '@/screens/societyAdmin/ChatListScreen';
+import GroupDetailScreen from '@/screens/societyAdmin/GroupDetailScreen';
+import FeedScreen from '@/screens/societyAdmin/FeedScreen';
+import ChatStackNavigator from '@/navigation/ChatStackNavigator';
 import ProfileScreen from '@/screens/societyAdmin/ProfileScreen';
 
 import { Colors } from '@/theme';
@@ -44,7 +46,9 @@ const UsersStackNavigator: React.FC = () => (
 // ---------------------------------------------------------------------------
 
 export type CommunityStackParamList = {
+  Feed: undefined;
   Groups: undefined;
+  GroupDetail: { groupId: string; name?: string };
   Announcements: undefined;
   Complaints: undefined;
 };
@@ -52,8 +56,13 @@ export type CommunityStackParamList = {
 const CommunityStack = createNativeStackNavigator<CommunityStackParamList>();
 
 const CommunityStackNavigator: React.FC = () => (
-  <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
+  <CommunityStack.Navigator
+    initialRouteName="Groups"
+    screenOptions={{ headerShown: false }}
+  >
     <CommunityStack.Screen name="Groups" component={GroupsScreen} />
+    <CommunityStack.Screen name="Feed" component={FeedScreen} />
+    <CommunityStack.Screen name="GroupDetail" component={GroupDetailScreen} />
     <CommunityStack.Screen name="Announcements" component={AnnouncementsScreen} />
     <CommunityStack.Screen name="Complaints" component={ComplaintsScreen} />
   </CommunityStack.Navigator>
@@ -100,7 +109,7 @@ const tabIconStyles = StyleSheet.create({
     borderRadius: 20,
   },
   focused: {
-    backgroundColor: 'rgba(108, 99, 255, 0.12)',
+    backgroundColor: 'rgba(79, 70, 229, 0.14)',
   },
 });
 
@@ -155,7 +164,7 @@ const SocietyAdminNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Chat"
-        component={ChatListScreen}
+        component={ChatStackNavigator}
         options={{
           tabBarLabel: 'Chat',
           tabBarIcon: ({ focused, size }) => (

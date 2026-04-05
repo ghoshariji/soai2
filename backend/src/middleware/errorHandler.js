@@ -211,6 +211,16 @@ const errorHandler = (err, req, res, next) => {
       ? err.errors
       : null;
 
+  } else if (err.name === 'MulterError') {
+    // Optional uploads (e.g. complaints) – bad field name, size, or count
+    statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    message =
+      err.code === 'LIMIT_FILE_SIZE'
+        ? 'One or more images are too large (max 10MB each).'
+        : IS_DEV
+          ? err.message
+          : 'Upload could not be processed. Use JPG/PNG/WebP, max 3 images.';
+
   } else if (!err.statusCode) {
     // Unrecognised / programmer error – hide internals from non-dev clients
     statusCode = 500;

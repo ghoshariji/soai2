@@ -9,6 +9,12 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+} from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Avatar from '@/components/common/Avatar';
 import Card from '@/components/common/Card';
@@ -42,6 +48,8 @@ interface PostCardProps {
   onLike: (postId: string) => void;
   onComment: (postId: string) => void;
   onDelete?: (postId: string) => void;
+  /** Society admin: allow deleting any post when onDelete is provided. */
+  canModerate?: boolean;
   onPress?: (postId: string) => void;
 }
 
@@ -77,12 +85,26 @@ const PostCard: React.FC<PostCardProps> = ({
   onLike,
   onComment,
   onDelete,
+  canModerate = false,
   onPress,
 }) => {
   const isLiked = post.likes.includes(currentUserId);
   const isOwner = post.authorId._id === currentUserId;
+  const showDelete = Boolean(onDelete && (isOwner || canModerate));
 
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
+  const heartScale = useSharedValue(1);
+  const heartStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+  }));
+
+  const handleLikePress = () => {
+    heartScale.value = withSequence(
+      withSpring(1.28, { damping: 10, stiffness: 400 }),
+      withSpring(1, { damping: 14, stiffness: 320 }),
+    );
+    onLike(post._id);
+  };
 
   const handleDelete = () => {
     Alert.alert(
@@ -127,8 +149,7 @@ const PostCard: React.FC<PostCardProps> = ({
           </View>
         </View>
 
-        {/* Delete button (owner only) */}
-        {isOwner && onDelete ? (
+        {showDelete ? (
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={handleDelete}
@@ -186,15 +207,17 @@ const PostCard: React.FC<PostCardProps> = ({
         {/* Like button */}
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => onLike(post._id)}
+          onPress={handleLikePress}
           activeOpacity={0.7}
           hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
         >
-          <Icon
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isLiked ? Colors.error : Colors.textSecondary}
-          />
+          <Animated.View style={heartStyle}>
+            <Icon
+              name={isLiked ? 'heart' : 'heart-outline'}
+              size={20}
+              color={isLiked ? Colors.error : Colors.textSecondary}
+            />
+          </Animated.View>
           {post.likesCount > 0 ? (
             <Text
               style={[

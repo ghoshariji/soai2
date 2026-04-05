@@ -9,6 +9,7 @@ import SocietiesScreen from '@/screens/superAdmin/SocietiesScreen';
 import CreateSocietyScreen from '@/screens/superAdmin/CreateSocietyScreen';
 import SocietyDetailScreen from '@/screens/superAdmin/SocietyDetailScreen';
 import AnalyticsScreen from '@/screens/superAdmin/AnalyticsScreen';
+import SubscriptionScreen from '@/screens/superAdmin/SubscriptionScreen';
 import SettingsScreen from '@/screens/superAdmin/SettingsScreen';
 
 import { Colors } from '@/theme';
@@ -40,6 +41,7 @@ const SocietiesStackNavigator: React.FC = () => (
 export type SuperAdminTabParamList = {
   Dashboard: undefined;
   Societies: undefined;
+  Billing: undefined;
   Analytics: undefined;
   Settings: undefined;
 };
@@ -75,7 +77,7 @@ const tabIconStyles = StyleSheet.create({
     borderRadius: 20,
   },
   focused: {
-    backgroundColor: 'rgba(108, 99, 255, 0.12)',
+    backgroundColor: 'rgba(79, 70, 229, 0.14)',
   },
 });
 
@@ -109,6 +111,16 @@ const SuperAdminNavigator: React.FC = () => {
           tabBarLabel: 'Societies',
           tabBarIcon: ({ focused, size }) => (
             <TabIcon name="business" focused={focused} size={size} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Billing"
+        component={SubscriptionScreen}
+        options={{
+          tabBarLabel: 'Billing',
+          tabBarIcon: ({ focused, size }) => (
+            <TabIcon name="card" focused={focused} size={size} />
           ),
         }}
       />

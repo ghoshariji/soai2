@@ -407,6 +407,7 @@ const getAllSubscriptions = asyncHandler(async (req, res) => {
     { $limit: limit },
     {
       $project: {
+        _id:           1,
         plan:          1,
         startDate:     1,
         expiryDate:    1,

@@ -6,13 +6,16 @@ import React, {
   ReactNode,
 } from 'react';
 import { Colors, LightColors } from './colors';
-import { Typography, Spacing, Radius } from './typography';
+import { Typography, Radius } from './typography';
+import { Spacing } from './spacing';
 import { getTheme, setTheme as persistTheme } from '../services/storage';
 
 export { Colors, LightColors } from './colors';
-export { Typography, Spacing, Radius } from './typography';
+export { Typography, Radius } from './typography';
+export { Spacing } from './spacing';
 export type { ColorKey, LightColorKey } from './colors';
-export type { SpacingKey, RadiusKey } from './typography';
+export type { RadiusKey } from './typography';
+export type { SpacingKey } from './spacing';
 
 // ---------------------------------------------------------------------------
 // Theme types

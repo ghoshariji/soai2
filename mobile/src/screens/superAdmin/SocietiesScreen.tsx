@@ -540,9 +540,7 @@ const SocietiesScreen: React.FC<Props> = ({ navigation }) => {
             style: currentStatus === 'active' ? 'destructive' : 'default',
             onPress: async () => {
               try {
-                await societyService.update(id, {
-                  status: currentStatus === 'active' ? 'inactive' : 'active',
-                });
+                await societyService.toggleStatus(id);
                 setSocieties((prev) =>
                   prev.map((s) =>
                     s._id === id
