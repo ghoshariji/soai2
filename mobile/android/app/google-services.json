@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "326149138518",
-    "project_id": "society-3570f",
-    "storage_bucket": "society-3570f.firebasestorage.app"
+    "project_number": "543270813959",
+    "project_id": "sociertywale",
+    "storage_bucket": "sociertywale.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:326149138518:android:474e02c605f8c21533f3f7",
+        "mobilesdk_app_id": "1:543270813959:android:bd038973717ab60a9945a2",
         "android_client_info": {
           "package_name": "com.soaimobile"
         }
@@ -15,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDpIDyc2JdaxfzDKHKv0Zi_Ix-s3F7tDI0"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:326149138518:android:e6922436046afc4033f3f7",
-        "android_client_info": {
-          "package_name": "com.soaimobile"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDpIDyc2JdaxfzDKHKv0Zi_Ix-s3F7tDI0"
+          "current_key": "AIzaSyDLrGHTqhN8Ql2oE35qT31Qq4XC_DVRGW8"
         }
       ],
       "services": {
