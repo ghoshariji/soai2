@@ -1,5 +1,5 @@
 {
-  "name": "soai-backend",
+  "name": "societywale-backend",
   "version": "1.0.0",
   "description": "Multi-tenant Society Management SaaS Backend",
   "main": "server.js",

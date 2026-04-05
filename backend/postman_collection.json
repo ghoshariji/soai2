@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "SOAI Platform API",
+    "name": "SocietyWale Platform API",
     "description": "Multi-tenant Society Management SaaS API",
     "version": "1.0.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -20,7 +20,7 @@
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/auth/login",
-            "body": { "mode": "raw", "raw": "{\"email\":\"superadmin@soai.com\",\"password\":\"SuperAdmin@123\"}" }
+            "body": { "mode": "raw", "raw": "{\"email\":\"superadmin@societywale.com\",\"password\":\"SuperAdmin@123\"}" }
           }
         },
         {

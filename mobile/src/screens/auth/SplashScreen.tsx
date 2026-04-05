@@ -131,7 +131,7 @@ const SplashScreen: React.FC<Props> = ({ navigation }) => {
         {/* Word mark */}
         <View style={styles.wordMark}>
           <Text style={styles.logoText}>
-            <Text style={styles.logoTextBrand}>SOAI</Text>
+            <Text style={styles.logoTextBrand}>SocietyWale</Text>
           </Text>
           <View style={styles.logoUnderline} />
         </View>

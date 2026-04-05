@@ -12,7 +12,7 @@ const createStorage = (folder) =>
   new CloudinaryStorage({
     cloudinary,
     params: {
-      folder: `soai/${folder}`,
+      folder: `societywale/${folder}`,
       allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
       transformation: [{ width: 1000, quality: 'auto' }],
     },

@@ -162,7 +162,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           {/* Gradient-style layered text title */}
           <View style={styles.titleRow}>
             <Text style={styles.titlePrimary}>Welcome to </Text>
-            <Text style={styles.titleBrand}>SOAI</Text>
+            <Text style={styles.titleBrand}>SocietyWale</Text>
           </View>
           <Text style={styles.subtitle}>
             Sign in with your role-assigned account (Super Admin, Society Admin,
@@ -274,7 +274,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         {/* ── Footer ── */}
         <Animated.View style={[styles.footer, { opacity: fadeAnim }]}>
           <Text style={styles.footerText}>
-            SOAI Society Management Platform
+            Society management platform for your community
           </Text>
           <Text style={styles.footerVersion}>v1.0.0</Text>
         </Animated.View>

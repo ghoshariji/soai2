@@ -22,7 +22,7 @@ function devApiHost(): string {
 
 export function getApiBaseUrl(): string {
   if (!__DEV__) {
-    return process.env.API_URL ?? 'https://api.soai.app/api';
+    return process.env.API_URL ?? 'https://societywale.onrender.com/api';
   }
   return `http://${devApiHost()}:${DEFAULT_API_PORT}/api`;
 }
@@ -32,7 +32,7 @@ export function getSocketBaseUrl(): string {
   if (!__DEV__) {
     return (
       process.env.SOCKET_URL ??
-      (process.env.API_URL?.replace(/\/api\/?$/, '') ?? 'https://api.soai.app')
+      (process.env.API_URL?.replace(/\/api\/?$/, '') ?? 'https://societywale.onrender.com')
     );
   }
   return `http://${devApiHost()}:${DEFAULT_API_PORT}`;

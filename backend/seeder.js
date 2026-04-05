@@ -8,7 +8,7 @@ const logger = require('./src/utils/logger');
 /** One password for every seeded demo account (12 characters). Override with SEED_USER_PASSWORD. */
 const SAMPLE_PASSWORD = process.env.SEED_USER_PASSWORD || 'SamplePass12';
 
-const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || 'superadmin@soai.com').toLowerCase().trim();
+const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || 'superadmin@societywale.com').toLowerCase().trim();
 
 /** All demo resident emails (same society). Kept in sync with seedSampleSociety + sync. */
 const SAMPLE_RESIDENTS = [

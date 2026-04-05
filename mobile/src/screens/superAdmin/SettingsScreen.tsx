@@ -79,7 +79,7 @@ const SettingsScreen: React.FC = () => {
           <Text style={styles.signOutText}>Sign out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.footer}>SoAI Super Admin · v1</Text>
+        <Text style={styles.footer}>SocietyWale Super Admin · v1</Text>
       </ScrollView>
     </SafeAreaView>
   );

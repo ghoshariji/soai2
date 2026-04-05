@@ -1,10 +1,10 @@
-# SOAI Platform – Deployment Guide
+# SocietyWale – Deployment Guide
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  SOAI SaaS Platform                  │
+│                 SocietyWale SaaS Platform              │
 ├──────────────────┬──────────────────────────────────┤
 │  React Native    │          Node.js Backend           │
 │  Mobile App      │  Express + Socket.IO + MongoDB    │
@@ -42,7 +42,7 @@ cp .env.example .env
 ```env
 NODE_ENV=production
 PORT=5000
-MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/soai_db
+MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/societywale_db
 JWT_ACCESS_SECRET=<random 64+ char string>
 JWT_REFRESH_SECRET=<random 64+ char string>
 CLOUDINARY_CLOUD_NAME=your_cloud_name
@@ -53,7 +53,7 @@ EMAIL_PORT=587
 EMAIL_USER=apikey
 EMAIL_PASS=SG.your_sendgrid_key
 EMAIL_FROM=noreply@yourdomain.com
-EMAIL_FROM_NAME=SOAI Platform
+EMAIL_FROM_NAME=SocietyWale
 SUPER_ADMIN_EMAIL=admin@yourdomain.com
 SUPER_ADMIN_PASSWORD=StrongPassword@123
 SUPER_ADMIN_NAME=Super Admin
@@ -101,14 +101,14 @@ CMD ["node", "server.js"]
 ```
 
 ```bash
-docker build -t soai-backend .
-docker run -p 5000:5000 --env-file .env soai-backend
+docker build -t societywale-backend .
+docker run -p 5000:5000 --env-file .env societywale-backend
 ```
 
 ### PM2 (Process Manager)
 ```bash
 npm install -g pm2
-pm2 start server.js --name soai-backend
+pm2 start server.js --name societywale-backend
 pm2 save
 pm2 startup
 ```
@@ -212,7 +212,7 @@ All seeded demo accounts (except super admin when `SUPER_ADMIN_PASSWORD` is set 
 
 | Role          | Email                       | Notes                          |
 |---------------|-----------------------------|--------------------------------|
-| Super Admin   | superadmin@soai.com         | Same as others unless `SUPER_ADMIN_PASSWORD` is set |
+| Super Admin   | superadmin@societywale.com  | Same as others unless `SUPER_ADMIN_PASSWORD` is set |
 | Society Admin | admin@greenvalley.com       | Green Valley Society           |
 | Residents     | rahul@greenvalley.com, priya@…, etc. | Eight sample flats; see `backend/seeder.js` |
 

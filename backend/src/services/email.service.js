@@ -39,7 +39,7 @@ function resolveMailConfig() {
   const fromName =
     process.env.EMAIL_FROM_NAME ||
     process.env.MAIL_FROM_NAME ||
-    'SOAI Platform';
+    'SocietyWale';
 
   return {
     host: host.trim(),
@@ -140,7 +140,7 @@ const baseTemplate = (content) => `
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SOAI Platform</title>
+  <title>SocietyWale</title>
 </head>
 <body style="margin:0;padding:0;background:#0f1117;font-family:'Segoe UI',Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f1117;min-height:100vh;">
@@ -148,7 +148,7 @@ const baseTemplate = (content) => `
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
         <tr>
           <td style="background:linear-gradient(135deg,#6c63ff,#4f46e5);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;color:#fff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">SOAI Platform</h1>
+            <h1 style="margin:0;color:#fff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">SocietyWale</h1>
             <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">Society Management System</p>
           </td>
         </tr>
@@ -159,7 +159,7 @@ const baseTemplate = (content) => `
         </tr>
         <tr>
           <td style="background:#12141e;border-radius:0 0 16px 16px;border:1px solid #2a2d3a;border-top:none;padding:24px 40px;text-align:center;">
-            <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} SOAI Platform. All rights reserved.</p>
+            <p style="margin:0;color:#6b7280;font-size:12px;">© ${new Date().getFullYear()} SocietyWale. All rights reserved.</p>
             <p style="margin:8px 0 0;color:#6b7280;font-size:12px;">This is an automated email. Please do not reply.</p>
           </td>
         </tr>
@@ -185,7 +185,7 @@ const sendWelcomeEmail = async (adminUser, password) => {
   const html = baseTemplate(`
     <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Welcome, ${adminUser.name}! 👋</h2>
     <p style="color:#9ca3af;margin:0 0 24px;font-size:15px;line-height:1.6;">
-      You have been assigned as the <strong style="color:#6c63ff;">Society Admin</strong> on the SOAI Platform.
+      You have been assigned as the <strong style="color:#6c63ff;">Society Admin</strong> on the SocietyWale.
       Below are your login credentials. Please change your password after first login.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0"
@@ -202,7 +202,7 @@ const sendWelcomeEmail = async (adminUser, password) => {
     <p style="color:#6b7280;font-size:12px;margin:24px 0 0;text-align:center;">
       Keep your credentials secure. Do not share them with anyone.
     </p>`);
-  return sendEmail(adminUser.email, 'Welcome to SOAI Platform – Your Admin Credentials', html);
+  return sendEmail(adminUser.email, 'Welcome to SocietyWale – Your Admin Credentials', html);
 };
 
 /**
@@ -217,13 +217,13 @@ const sendNewSocietyAdminWelcome = async ({
   const appUrl =
     process.env.FRONTEND_URL ||
     process.env.APP_URL ||
-    'https://app.soai.in';
+    'https://app.societywale.in';
   const loginUrl = `${appUrl.replace(/\/$/, '')}/login`;
 
   const html = baseTemplate(`
     <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Welcome to ${societyName}!</h2>
     <p style="color:#9ca3af;margin:0 0 24px;font-size:15px;line-height:1.6;">
-      Hi <strong style="color:#e5e7eb;">${name}</strong>, your society is registered on <strong style="color:#6c63ff;">SOAI</strong>.
+      Hi <strong style="color:#e5e7eb;">${name}</strong>, your society is registered on <strong style="color:#6c63ff;">SocietyWale</strong>.
       Use the credentials below to sign in for the first time.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0"
@@ -236,7 +236,7 @@ const sendNewSocietyAdminWelcome = async ({
     </p>
     <div style="text-align:center;">
       <a href="${loginUrl}" style="display:inline-block;background:linear-gradient(135deg,#6c63ff,#4f46e5);color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">
-        Log in to SOAI
+        Log in to SocietyWale
       </a>
     </div>`);
 
@@ -251,7 +251,7 @@ const sendUserWelcomeEmail = async (user, password, societyName) => {
   const html = baseTemplate(`
     <h2 style="color:#fff;margin:0 0 8px;font-size:22px;">Welcome to ${societyName}! 🏡</h2>
     <p style="color:#9ca3af;margin:0 0 24px;font-size:15px;line-height:1.6;">
-      Your resident account has been created on <strong style="color:#6c63ff;">SOAI Platform</strong>.
+      Your resident account has been created on <strong style="color:#6c63ff;">SocietyWale</strong>.
       Use the credentials below to access your community app.
     </p>
     <table width="100%" cellpadding="0" cellspacing="0"
@@ -264,7 +264,7 @@ const sendUserWelcomeEmail = async (user, password, societyName) => {
     <p style="color:#9ca3af;font-size:14px;margin:0;line-height:1.6;">
       You can now access announcements, community feeds, raise complaints, and chat with your neighbours.
     </p>`);
-  return sendEmail(user.email, `Welcome to ${societyName} – SOAI Platform`, html);
+  return sendEmail(user.email, `Welcome to ${societyName} – SocietyWale`, html);
 };
 
 /**
@@ -302,7 +302,7 @@ const sendPasswordResetEmail = async (user, resetToken) => {
     <p style="color:#ef4444;font-size:13px;margin:0;text-align:center;">
       If you did not request this, please ignore this email and secure your account.
     </p>`);
-  return sendEmail(user.email, 'SOAI Platform – Password Reset', html);
+  return sendEmail(user.email, 'SocietyWale – Password Reset', html);
 };
 
 const sendSubscriptionExpiryWarning = async (adminEmail, societyName, daysLeft, expiryDate) => {
@@ -333,7 +333,7 @@ const sendSubscriptionExpiredEmail = async (adminEmail, societyName) => {
       All resident logins have been suspended until the subscription is renewed.
     </p>
     <p style="color:#9ca3af;font-size:14px;line-height:1.6;">
-      Please contact the SOAI Platform support team or renew directly from the admin portal.
+      Please contact the SocietyWale support team or renew directly from the admin portal.
     </p>`);
   return sendEmail(adminEmail, `🚫 Subscription Expired – ${societyName}`, html);
 };

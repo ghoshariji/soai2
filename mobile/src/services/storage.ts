@@ -5,10 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // ---------------------------------------------------------------------------
 
 const KEYS = {
-  ACCESS_TOKEN: '@soai_access_token',
-  REFRESH_TOKEN: '@soai_refresh_token',
-  USER: '@soai_user',
-  THEME: '@soai_theme',
+  ACCESS_TOKEN: '@societywale_access_token',
+  REFRESH_TOKEN: '@societywale_refresh_token',
+  USER: '@societywale_user',
+  THEME: '@societywale_theme',
 } as const;
 
 // ---------------------------------------------------------------------------

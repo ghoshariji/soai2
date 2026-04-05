@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:326149138518:android:474e02c605f8c21533f3f7",
         "android_client_info": {
-          "package_name": "com.android.application"
+          "package_name": "com.soaimobile"
         }
       },
       "oauth_client": [],
@@ -28,7 +28,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:326149138518:android:e6922436046afc4033f3f7",
         "android_client_info": {
-          "package_name": "om.android.application"
+          "package_name": "com.soaimobile"
         }
       },
       "oauth_client": [],
