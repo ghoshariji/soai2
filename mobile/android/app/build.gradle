@@ -130,5 +130,4 @@ apply from: file("../../node_modules/@react-native-community/cli-platform-androi
 
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
-// Firebase — must be last; requires android/app/google-services.json from Firebase Console
-apply plugin: "com.google.gms.google-services"
+apply plugin: 'com.google.gms.google-services'
